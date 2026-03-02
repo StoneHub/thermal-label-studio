@@ -5,6 +5,8 @@
   "packageManager": "pnpm@9.15.0",
   "scripts": {
     "dev": "pnpm -r --parallel dev",
+    "dev:share": "bash ./scripts/dev-share.sh",
+    "dev:share:public": "bash ./scripts/dev-share.sh --public",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint"
