@@ -1,0 +1,527 @@
+{
+  "schemaVersion": "tls.template/v1",
+  "id": "kawaii-cats-sheet",
+  "name": "Kawaii Cats Sticker Sheet",
+  "mode": "sticker_sheet_2x3",
+  "canvas": {
+    "width": 800,
+    "height": 1200,
+    "dpi": 203,
+    "unit": "px"
+  },
+  "theme": {
+    "tags": [
+      "cute",
+      "cats",
+      "kawaii"
+    ],
+    "defaultPalette": {
+      "bg": "#fff4f7",
+      "fg": "#2f2235",
+      "accent": "#ff78aa"
+    }
+  },
+  "fields": {
+    "sheet_title": {
+      "type": "text",
+      "label": "Sheet header",
+      "default": "Kawaii Cat Notes",
+      "maxLength": 40
+    },
+    "sheet_icon": {
+      "type": "image",
+      "label": "Optional sheet icon",
+      "required": false,
+      "fit": "cover"
+    },
+    "sticker1_title": {
+      "type": "text",
+      "label": "Sticker 1 title",
+      "default": "Meow Mail",
+      "maxLength": 24
+    },
+    "sticker1_subtitle": {
+      "type": "text",
+      "label": "Sticker 1 subtitle",
+      "default": "deliver with love",
+      "maxLength": 42
+    },
+    "sticker1_icon": {
+      "type": "image",
+      "label": "Sticker 1 icon",
+      "required": false,
+      "fit": "contain"
+    },
+    "sticker2_title": {
+      "type": "text",
+      "label": "Sticker 2 title",
+      "default": "Pawsitive",
+      "maxLength": 24
+    },
+    "sticker2_subtitle": {
+      "type": "text",
+      "label": "Sticker 2 subtitle",
+      "default": "you got this!",
+      "maxLength": 42
+    },
+    "sticker2_icon": {
+      "type": "image",
+      "label": "Sticker 2 icon",
+      "required": false,
+      "fit": "contain"
+    },
+    "sticker3_title": {
+      "type": "text",
+      "label": "Sticker 3 title",
+      "default": "Nap Time",
+      "maxLength": 24
+    },
+    "sticker3_subtitle": {
+      "type": "text",
+      "label": "Sticker 3 subtitle",
+      "default": "do not disturb",
+      "maxLength": 42
+    },
+    "sticker3_icon": {
+      "type": "image",
+      "label": "Sticker 3 icon",
+      "required": false,
+      "fit": "contain"
+    },
+    "sticker4_title": {
+      "type": "text",
+      "label": "Sticker 4 title",
+      "default": "Snacc",
+      "maxLength": 24
+    },
+    "sticker4_subtitle": {
+      "type": "text",
+      "label": "Sticker 4 subtitle",
+      "default": "tiny treat inside",
+      "maxLength": 42
+    },
+    "sticker4_icon": {
+      "type": "image",
+      "label": "Sticker 4 icon",
+      "required": false,
+      "fit": "contain"
+    },
+    "sticker5_title": {
+      "type": "text",
+      "label": "Sticker 5 title",
+      "default": "Zoomies",
+      "maxLength": 24
+    },
+    "sticker5_subtitle": {
+      "type": "text",
+      "label": "Sticker 5 subtitle",
+      "default": "urgent but cute",
+      "maxLength": 42
+    },
+    "sticker5_icon": {
+      "type": "image",
+      "label": "Sticker 5 icon",
+      "required": false,
+      "fit": "contain"
+    },
+    "sticker6_title": {
+      "type": "text",
+      "label": "Sticker 6 title",
+      "default": "Purrfect",
+      "maxLength": 24
+    },
+    "sticker6_subtitle": {
+      "type": "text",
+      "label": "Sticker 6 subtitle",
+      "default": "sealed w/ purr",
+      "maxLength": 42
+    },
+    "sticker6_icon": {
+      "type": "image",
+      "label": "Sticker 6 icon",
+      "required": false,
+      "fit": "contain"
+    }
+  },
+  "elements": [
+    {
+      "type": "rect",
+      "x": 0,
+      "y": 0,
+      "w": 800,
+      "h": 1200,
+      "style": {
+        "fill": "#fff4f7"
+      }
+    },
+    {
+      "type": "text",
+      "field": "sheet_title",
+      "x": 110,
+      "y": 8,
+      "w": 580,
+      "h": 48,
+      "style": {
+        "fontFamily": "Baloo",
+        "fontSize": 30,
+        "align": "center",
+        "color": "#2f2235"
+      }
+    },
+    {
+      "type": "image",
+      "field": "sheet_icon",
+      "optional": true,
+      "x": 42,
+      "y": 8,
+      "w": 42,
+      "h": 42,
+      "style": {
+        "shape": "circle",
+        "stroke": "#ff78aa"
+      }
+    },
+    {
+      "type": "rect",
+      "x": 30,
+      "y": 40,
+      "w": 360,
+      "h": 357,
+      "style": {
+        "fill": "#ffffffcc",
+        "radius": 26,
+        "stroke": "#22222222",
+        "strokeWidth": 2
+      }
+    },
+    {
+      "type": "image",
+      "field": "sticker1_icon",
+      "optional": true,
+      "x": 50,
+      "y": 58,
+      "w": 74,
+      "h": 74,
+      "style": {
+        "shape": "circle",
+        "fill": "#fff",
+        "stroke": "#00000022"
+      }
+    },
+    {
+      "type": "text",
+      "field": "sticker1_title",
+      "x": 48,
+      "y": 145,
+      "w": 324,
+      "h": 72,
+      "style": {
+        "fontFamily": "Baloo",
+        "fontSize": 42,
+        "weight": 700,
+        "align": "center",
+        "color": "#2a2130"
+      }
+    },
+    {
+      "type": "text",
+      "field": "sticker1_subtitle",
+      "x": 48,
+      "y": 220,
+      "w": 324,
+      "h": 120,
+      "style": {
+        "fontFamily": "Nunito",
+        "fontSize": 28,
+        "align": "center",
+        "color": "#4a3e56",
+        "multiline": true
+      }
+    },
+    {
+      "type": "rect",
+      "x": 410,
+      "y": 40,
+      "w": 360,
+      "h": 357,
+      "style": {
+        "fill": "#ffffffcc",
+        "radius": 26,
+        "stroke": "#22222222",
+        "strokeWidth": 2
+      }
+    },
+    {
+      "type": "image",
+      "field": "sticker2_icon",
+      "optional": true,
+      "x": 430,
+      "y": 58,
+      "w": 74,
+      "h": 74,
+      "style": {
+        "shape": "circle",
+        "fill": "#fff",
+        "stroke": "#00000022"
+      }
+    },
+    {
+      "type": "text",
+      "field": "sticker2_title",
+      "x": 428,
+      "y": 145,
+      "w": 324,
+      "h": 72,
+      "style": {
+        "fontFamily": "Baloo",
+        "fontSize": 42,
+        "weight": 700,
+        "align": "center",
+        "color": "#2a2130"
+      }
+    },
+    {
+      "type": "text",
+      "field": "sticker2_subtitle",
+      "x": 428,
+      "y": 220,
+      "w": 324,
+      "h": 120,
+      "style": {
+        "fontFamily": "Nunito",
+        "fontSize": 28,
+        "align": "center",
+        "color": "#4a3e56",
+        "multiline": true
+      }
+    },
+    {
+      "type": "rect",
+      "x": 30,
+      "y": 421,
+      "w": 360,
+      "h": 357,
+      "style": {
+        "fill": "#ffffffcc",
+        "radius": 26,
+        "stroke": "#22222222",
+        "strokeWidth": 2
+      }
+    },
+    {
+      "type": "image",
+      "field": "sticker3_icon",
+      "optional": true,
+      "x": 50,
+      "y": 439,
+      "w": 74,
+      "h": 74,
+      "style": {
+        "shape": "circle",
+        "fill": "#fff",
+        "stroke": "#00000022"
+      }
+    },
+    {
+      "type": "text",
+      "field": "sticker3_title",
+      "x": 48,
+      "y": 526,
+      "w": 324,
+      "h": 72,
+      "style": {
+        "fontFamily": "Baloo",
+        "fontSize": 42,
+        "weight": 700,
+        "align": "center",
+        "color": "#2a2130"
+      }
+    },
+    {
+      "type": "text",
+      "field": "sticker3_subtitle",
+      "x": 48,
+      "y": 601,
+      "w": 324,
+      "h": 120,
+      "style": {
+        "fontFamily": "Nunito",
+        "fontSize": 28,
+        "align": "center",
+        "color": "#4a3e56",
+        "multiline": true
+      }
+    },
+    {
+      "type": "rect",
+      "x": 410,
+      "y": 421,
+      "w": 360,
+      "h": 357,
+      "style": {
+        "fill": "#ffffffcc",
+        "radius": 26,
+        "stroke": "#22222222",
+        "strokeWidth": 2
+      }
+    },
+    {
+      "type": "image",
+      "field": "sticker4_icon",
+      "optional": true,
+      "x": 430,
+      "y": 439,
+      "w": 74,
+      "h": 74,
+      "style": {
+        "shape": "circle",
+        "fill": "#fff",
+        "stroke": "#00000022"
+      }
+    },
+    {
+      "type": "text",
+      "field": "sticker4_title",
+      "x": 428,
+      "y": 526,
+      "w": 324,
+      "h": 72,
+      "style": {
+        "fontFamily": "Baloo",
+        "fontSize": 42,
+        "weight": 700,
+        "align": "center",
+        "color": "#2a2130"
+      }
+    },
+    {
+      "type": "text",
+      "field": "sticker4_subtitle",
+      "x": 428,
+      "y": 601,
+      "w": 324,
+      "h": 120,
+      "style": {
+        "fontFamily": "Nunito",
+        "fontSize": 28,
+        "align": "center",
+        "color": "#4a3e56",
+        "multiline": true
+      }
+    },
+    {
+      "type": "rect",
+      "x": 30,
+      "y": 802,
+      "w": 360,
+      "h": 357,
+      "style": {
+        "fill": "#ffffffcc",
+        "radius": 26,
+        "stroke": "#22222222",
+        "strokeWidth": 2
+      }
+    },
+    {
+      "type": "image",
+      "field": "sticker5_icon",
+      "optional": true,
+      "x": 50,
+      "y": 820,
+      "w": 74,
+      "h": 74,
+      "style": {
+        "shape": "circle",
+        "fill": "#fff",
+        "stroke": "#00000022"
+      }
+    },
+    {
+      "type": "text",
+      "field": "sticker5_title",
+      "x": 48,
+      "y": 907,
+      "w": 324,
+      "h": 72,
+      "style": {
+        "fontFamily": "Baloo",
+        "fontSize": 42,
+        "weight": 700,
+        "align": "center",
+        "color": "#2a2130"
+      }
+    },
+    {
+      "type": "text",
+      "field": "sticker5_subtitle",
+      "x": 48,
+      "y": 982,
+      "w": 324,
+      "h": 120,
+      "style": {
+        "fontFamily": "Nunito",
+        "fontSize": 28,
+        "align": "center",
+        "color": "#4a3e56",
+        "multiline": true
+      }
+    },
+    {
+      "type": "rect",
+      "x": 410,
+      "y": 802,
+      "w": 360,
+      "h": 357,
+      "style": {
+        "fill": "#ffffffcc",
+        "radius": 26,
+        "stroke": "#22222222",
+        "strokeWidth": 2
+      }
+    },
+    {
+      "type": "image",
+      "field": "sticker6_icon",
+      "optional": true,
+      "x": 430,
+      "y": 820,
+      "w": 74,
+      "h": 74,
+      "style": {
+        "shape": "circle",
+        "fill": "#fff",
+        "stroke": "#00000022"
+      }
+    },
+    {
+      "type": "text",
+      "field": "sticker6_title",
+      "x": 428,
+      "y": 907,
+      "w": 324,
+      "h": 72,
+      "style": {
+        "fontFamily": "Baloo",
+        "fontSize": 42,
+        "weight": 700,
+        "align": "center",
+        "color": "#2a2130"
+      }
+    },
+    {
+      "type": "text",
+      "field": "sticker6_subtitle",
+      "x": 428,
+      "y": 982,
+      "w": 324,
+      "h": 120,
+      "style": {
+        "fontFamily": "Nunito",
+        "fontSize": 28,
+        "align": "center",
+        "color": "#4a3e56",
+        "multiline": true
+      }
+    }
+  ]
+}

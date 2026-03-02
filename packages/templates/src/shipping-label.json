@@ -1,0 +1,10 @@
+{
+  "id": "shipping-basic",
+  "name": "Shipping Label (Basic)",
+  "size": { "width": 101.6, "height": 152.4, "unit": "mm" },
+  "layers": [
+    { "id": "title", "type": "text", "x": 24, "y": 24, "text": "SHIP TO", "fontSize": 28 },
+    { "id": "address", "type": "text", "x": 24, "y": 70, "text": "{{recipient_address}}", "fontSize": 22 },
+    { "id": "barcode", "type": "image", "x": 24, "y": 220, "width": 720, "height": 200, "source": "{{barcode_png}}" }
+  ]
+}

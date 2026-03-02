@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "tls.template-pack/v1",
+  "name": "Cute Starter Pack",
+  "templates": [
+    "sticker-sheets/kawaii-cats-sheet.template.json",
+    "sticker-sheets/pastel-rainbow-sheet.template.json",
+    "sticker-sheets/plant-babies-sheet.template.json",
+    "sticker-sheets/coffee-snacks-sheet.template.json",
+    "sticker-sheets/happy-mail-sheet.template.json",
+    "sticker-sheets/study-buddy-sheet.template.json",
+    "full-size/cute-shipping-label.template.json",
+    "full-size/pantry-bin-label.template.json",
+    "full-size/freezer-meal-label.template.json",
+    "full-size/thank-you-note-label.template.json"
+  ]
+}

@@ -1,0 +1,222 @@
+{
+  "schemaVersion": "tls.template/v1",
+  "id": "freezer-meal-label",
+  "name": "Freezer Meal Prep Label",
+  "mode": "full_label_4x6",
+  "canvas": {
+    "width": 800,
+    "height": 1200,
+    "dpi": 203,
+    "unit": "px"
+  },
+  "theme": {
+    "tags": [
+      "cute",
+      "freezer",
+      "meal-prep"
+    ],
+    "defaultPalette": {
+      "bg": "#f2fbff",
+      "fg": "#2f2235",
+      "accent": "#66bcd9"
+    }
+  },
+  "fields": {
+    "title": {
+      "type": "text",
+      "label": "Main title",
+      "default": "Freezer Meal",
+      "maxLength": 48
+    },
+    "subtitle": {
+      "type": "text",
+      "label": "Subtitle",
+      "default": "Heat, eat, smile",
+      "maxLength": 64
+    },
+    "line1": {
+      "type": "text",
+      "label": "Line 1",
+      "default": "Recipient: Monroe",
+      "maxLength": 64
+    },
+    "line2": {
+      "type": "text",
+      "label": "Line 2",
+      "default": "From: Clawbot HQ",
+      "maxLength": 64
+    },
+    "line3": {
+      "type": "text",
+      "label": "Line 3",
+      "default": "Date: 2026-03-02",
+      "maxLength": 64
+    },
+    "note": {
+      "type": "text",
+      "label": "Note",
+      "default": "Packed with care \u2665",
+      "maxLength": 140,
+      "multiline": true
+    },
+    "hero_image": {
+      "type": "image",
+      "label": "Optional hero image",
+      "required": false,
+      "fit": "cover"
+    },
+    "badge_image": {
+      "type": "image",
+      "label": "Optional badge image",
+      "required": false,
+      "fit": "contain"
+    }
+  },
+  "elements": [
+    {
+      "type": "rect",
+      "x": 0,
+      "y": 0,
+      "w": 800,
+      "h": 1200,
+      "style": {
+        "fill": "#f2fbff"
+      }
+    },
+    {
+      "type": "rect",
+      "x": 32,
+      "y": 32,
+      "w": 736,
+      "h": 1136,
+      "style": {
+        "fill": "#ffffffcc",
+        "radius": 28,
+        "stroke": "#00000022",
+        "strokeWidth": 2
+      }
+    },
+    {
+      "type": "image",
+      "field": "hero_image",
+      "optional": true,
+      "x": 62,
+      "y": 74,
+      "w": 676,
+      "h": 360,
+      "style": {
+        "radius": 24,
+        "stroke": "#66bcd9"
+      }
+    },
+    {
+      "type": "text",
+      "field": "title",
+      "x": 62,
+      "y": 458,
+      "w": 676,
+      "h": 72,
+      "style": {
+        "fontFamily": "Baloo",
+        "fontSize": 56,
+        "align": "center",
+        "weight": 700,
+        "color": "#2f2235"
+      }
+    },
+    {
+      "type": "text",
+      "field": "subtitle",
+      "x": 62,
+      "y": 532,
+      "w": 676,
+      "h": 56,
+      "style": {
+        "fontFamily": "Nunito",
+        "fontSize": 30,
+        "align": "center",
+        "color": "#4a3e56"
+      }
+    },
+    {
+      "type": "text",
+      "field": "line1",
+      "x": 84,
+      "y": 636,
+      "w": 632,
+      "h": 46,
+      "style": {
+        "fontFamily": "Nunito",
+        "fontSize": 30,
+        "color": "#2f2235"
+      }
+    },
+    {
+      "type": "text",
+      "field": "line2",
+      "x": 84,
+      "y": 688,
+      "w": 632,
+      "h": 46,
+      "style": {
+        "fontFamily": "Nunito",
+        "fontSize": 30,
+        "color": "#2f2235"
+      }
+    },
+    {
+      "type": "text",
+      "field": "line3",
+      "x": 84,
+      "y": 740,
+      "w": 632,
+      "h": 46,
+      "style": {
+        "fontFamily": "Nunito",
+        "fontSize": 30,
+        "color": "#2f2235"
+      }
+    },
+    {
+      "type": "rect",
+      "x": 70,
+      "y": 808,
+      "w": 660,
+      "h": 258,
+      "style": {
+        "fill": "#ffffffcc",
+        "radius": 18,
+        "stroke": "#00000020",
+        "strokeWidth": 1
+      }
+    },
+    {
+      "type": "text",
+      "field": "note",
+      "x": 92,
+      "y": 836,
+      "w": 616,
+      "h": 204,
+      "style": {
+        "fontFamily": "Nunito",
+        "fontSize": 32,
+        "multiline": true,
+        "color": "#3a2f44"
+      }
+    },
+    {
+      "type": "image",
+      "field": "badge_image",
+      "optional": true,
+      "x": 640,
+      "y": 44,
+      "w": 98,
+      "h": 98,
+      "style": {
+        "shape": "circle",
+        "fill": "#fff",
+        "stroke": "#66bcd9"
+      }
+    }
+  ]
+}
