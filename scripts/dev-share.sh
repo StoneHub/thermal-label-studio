@@ -63,6 +63,11 @@ if [[ "$PUBLIC" -eq 1 ]]; then
 fi
 
 echo "LAN URL: http://${LAN_IP}:${PORT}"
-echo "Starting Vite with host 0.0.0.0 on port ${PORT}..."
+echo "API URL: http://${LAN_IP}:3001"
+echo "Starting API + Vite with host 0.0.0.0..."
+
+pnpm --filter @tls/api dev > /tmp/tls-api.log 2>&1 &
+API_PID=$!
+trap 'kill "$API_PID" >/dev/null 2>&1 || true; cleanup' EXIT INT TERM
 
 pnpm --filter @tls/web exec vite --host 0.0.0.0 --port "${PORT}"

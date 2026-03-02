@@ -1,20 +1,13 @@
 # Thermal Label Studio
 
-Monorepo scaffold for a 4x6 thermal label editor + API.
+Mobile-first MVP for editing and previewing thermal labels (4x6 @ 203 DPI).
 
 ## Workspace Layout
 
-- `apps/web` — Vite + React interactive editor starter
-- `apps/api` — Express REST API starter
-- `packages/core` — shared TypeScript types + render pipeline stubs
-- `packages/templates` — starter label templates (JSON)
-
-## Stack
-
-- **Package manager:** pnpm workspaces
-- **Language:** TypeScript (ESM)
-- **Web app:** React + Vite
-- **API:** Express + tsx (dev)
+- `apps/web` — React editor UI (template picker, text/image fields, image pan/scale viewport, preview)
+- `apps/api` — Express API (template list, apply overrides, render preview PNG)
+- `packages/core` — shared template types + helper functions
+- `packages/templates` — starter full-size + sticker templates
 
 ## Quick Start
 
@@ -23,59 +16,53 @@ pnpm install
 pnpm dev
 ```
 
-This starts all workspace dev scripts in parallel.
+This starts API + web in watch mode.
 
-### Run apps individually
+### App URLs
 
-```bash
-pnpm --filter @tls/web dev   # http://localhost:5173
-pnpm --filter @tls/api dev   # http://localhost:3001
-```
+- Web: `http://localhost:5173`
+- API: `http://localhost:3001`
 
-### Build everything
+## Build check
 
 ```bash
 pnpm build
 ```
 
-## Testing on phone
+## API endpoints
 
-### A) Same Wi-Fi / LAN test (recommended first)
+- `GET /health`
+- `GET /templates?category=all|full|sticker`
+- `POST /templates/:id/apply`
+  - body: `{ "overrides": { "recipient_address": "Monroe\n123 Main" } }`
+- `POST /templates/:id/render`
+  - body: `{ "overrides": {...}, "imageTransforms": { "barcode": { "x": 8, "y": -12, "scale": 1.2 } } }`
+  - returns `{ width, height, pngBase64 }`
 
-1. Start the shared dev server:
+## Phone / LAN testing
+
+### Same Wi-Fi (recommended)
 
 ```bash
 pnpm dev:share
 ```
 
-2. In the terminal output, copy the `LAN URL` (example: `http://192.168.50.50:5173`).
-3. On your phone (same local network), open that URL in a browser.
+This script starts API + web and prints:
 
-### B) Temporary public link (optional)
+- `LAN URL` for web (example `http://192.168.50.50:5173`)
+- `API URL` (example `http://192.168.50.50:3001`)
 
-If `cloudflared` is installed, run:
+Open the LAN URL on your phone browser.
+
+### Optional public tunnel
 
 ```bash
 pnpm dev:share:public
 ```
 
-The script prints a temporary `https://...trycloudflare.com` URL that can be opened from any network.
+Requires `cloudflared`; prints a temporary `https://...trycloudflare.com` URL.
 
-### Verification steps
+## MVP scope notes
 
-- Confirm host terminal shows Vite running on `0.0.0.0:5173`.
-- From the host machine, open `http://localhost:5173`.
-- From phone on same Wi-Fi, open the printed `LAN URL`.
-- If using tunnel mode, open the printed `trycloudflare` URL and verify the same page renders.
-- Stop sharing with `Ctrl+C` (this also stops the tunnel if running).
-
-### Useful endpoints (API)
-
-- `GET /health`
-- `GET /templates/default`
-- `POST /render` with a `LabelTemplate` JSON body
-
-## Notes
-
-- `packages/core` currently includes **stubs** for render pipeline (`renderLabelStub`), intended to be replaced with real canvas/TSPL generation.
-- `packages/templates` includes shipping-label and sticker-sheet starter JSON templates.
+- Preview PNG rendering is lightweight: text and image blocks are rendered for quick visual verification.
+- Intended for rapid iteration and local testing before integrating full production rendering pipeline.

@@ -42,6 +42,8 @@ export interface RenderResult {
   notes: string[];
 }
 
+export type LabelCategory = "full" | "sticker";
+
 const MM_PER_INCH = 25.4;
 const THERMAL_DPI = 203;
 
@@ -56,15 +58,8 @@ export const createEmptyTemplate = (id = "new-template"): LabelTemplate => ({
 });
 
 export const renderLabelStub = (template: LabelTemplate): RenderResult => {
-  const widthPx =
-    template.size.unit === "mm"
-      ? mmToPxAt203Dpi(template.size.width)
-      : Math.round(template.size.width);
-
-  const heightPx =
-    template.size.unit === "mm"
-      ? mmToPxAt203Dpi(template.size.height)
-      : Math.round(template.size.height);
+  const widthPx = toPixels(template.size.width, template.size.unit);
+  const heightPx = toPixels(template.size.height, template.size.unit);
 
   return {
     ok: true,
@@ -78,3 +73,40 @@ export const renderLabelStub = (template: LabelTemplate): RenderResult => {
     ]
   };
 };
+
+export const toPixels = (value: number, unit: LabelUnit): number =>
+  unit === "mm" ? mmToPxAt203Dpi(value) : Math.round(value);
+
+export const extractPlaceholders = (template: LabelTemplate): string[] => {
+  const set = new Set<string>();
+  for (const layer of template.layers) {
+    const source = layer.type === "text" ? layer.text : layer.source;
+    for (const match of source.matchAll(/\{\{\s*([a-zA-Z0-9_\-]+)\s*\}\}/g)) {
+      set.add(match[1]);
+    }
+  }
+  return [...set];
+};
+
+export const applyFieldOverrides = (
+  template: LabelTemplate,
+  overrides: Record<string, string>
+): LabelTemplate => {
+  const replace = (input: string): string =>
+    input.replace(/\{\{\s*([a-zA-Z0-9_\-]+)\s*\}\}/g, (_full, key: string) =>
+      overrides[key] ?? `{{${key}}}`
+    );
+
+  return {
+    ...template,
+    layers: template.layers.map((layer) => {
+      if (layer.type === "text") {
+        return { ...layer, text: replace(layer.text) };
+      }
+      return { ...layer, source: replace(layer.source) };
+    })
+  };
+};
+
+export const inferTemplateCategory = (template: LabelTemplate): LabelCategory =>
+  template.id.includes("sticker") ? "sticker" : "full";
