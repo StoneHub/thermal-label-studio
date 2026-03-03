@@ -1,13 +1,14 @@
 {
   "id": "sticker-sheet-cute",
   "name": "Sticker Sheet 2x3",
-  "size": { "width": 101.6, "height": 152.4, "unit": "mm" },
+  "category": "sticker",
+  "size": { "width": 800, "height": 1200, "unit": "px" },
   "layers": [
-    { "id": "sticker-1", "type": "text", "x": 30, "y": 40, "text": "{{sticker_1}}", "fontSize": 24 },
-    { "id": "sticker-2", "type": "text", "x": 420, "y": 40, "text": "{{sticker_2}}", "fontSize": 24 },
-    { "id": "sticker-3", "type": "text", "x": 30, "y": 260, "text": "{{sticker_3}}", "fontSize": 24 },
-    { "id": "sticker-4", "type": "text", "x": 420, "y": 260, "text": "{{sticker_4}}", "fontSize": 24 },
-    { "id": "sticker-5", "type": "text", "x": 30, "y": 480, "text": "{{sticker_5}}", "fontSize": 24 },
-    { "id": "sticker-6", "type": "text", "x": 420, "y": 480, "text": "{{sticker_6}}", "fontSize": 24 }
+    { "id": "sticker-1", "type": "text", "x": 30, "y": 40, "width": 350, "height": 350, "text": "{{sticker_1}}", "fontSize": 24 },
+    { "id": "sticker-2", "type": "text", "x": 420, "y": 40, "width": 350, "height": 350, "text": "{{sticker_2}}", "fontSize": 24 },
+    { "id": "sticker-3", "type": "text", "x": 30, "y": 420, "width": 350, "height": 350, "text": "{{sticker_3}}", "fontSize": 24 },
+    { "id": "sticker-4", "type": "text", "x": 420, "y": 420, "width": 350, "height": 350, "text": "{{sticker_4}}", "fontSize": 24 },
+    { "id": "sticker-5", "type": "text", "x": 30, "y": 810, "width": 350, "height": 350, "text": "{{sticker_5}}", "fontSize": 24 },
+    { "id": "sticker-6", "type": "text", "x": 420, "y": 810, "width": 350, "height": 350, "text": "{{sticker_6}}", "fontSize": 24 }
   ]
 }

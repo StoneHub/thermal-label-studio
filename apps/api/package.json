@@ -15,12 +15,15 @@
     "@tls/templates": "workspace:*",
     "cors": "^2.8.5",
     "express": "^4.21.1",
+    "multer": "^1.4.5-lts.1",
     "pngjs": "^7.0.0",
+    "sharp": "^0.33.2",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
+    "@types/multer": "^1.4.12",
     "@types/node": "^22.10.1",
     "@types/pngjs": "^6.0.5",
     "tsx": "^4.19.1",
