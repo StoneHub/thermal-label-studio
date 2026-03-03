@@ -21,6 +21,18 @@ Target canvas is `800x1200` (optimized for 4x6 @ 203 DPI workflows).
 - Mobile-friendly editing layout
 - API for template ops, render, and print-job orchestration
 
+## Portfolio Demo
+
+When running locally or on LAN:
+- Editor: `http://localhost:5173`
+- API: `http://localhost:3001`
+
+Suggested portfolio assets:
+- `docs/screenshots/editor-main.png`
+- `docs/screenshots/template-browser.png`
+- `docs/screenshots/mobile-layout.png`
+- `docs/demo.gif`
+
 ## Project Structure
 
 ```text
@@ -148,14 +160,14 @@ curl -X POST http://localhost:3001/print/jobs \
   -d '{"templateId":"shipping-label","overrides":{"name":"Bob"},"copies":2}'
 ```
 
-## Current Status
+## Roadmap
 
-The editor is production-leaning for design/testing flows. Next priority areas:
-- real printer execution pipeline + robust job status
-- render parity between editor and API output
-- persistent shared asset/template storage
-- agent-assisted design suggestions and auto-fix workflows
+- Real printer execution pipeline + robust job status/retries
+- Render parity between editor and API output
+- Shared persistent asset/template storage
+- Agent-assisted design suggestions and auto-fix workflows
+- One-click "prepare for print" quality checks
 
 ## License
 
-Private project by default. Add a license if you plan to make it public.
+MIT. See [LICENSE](./LICENSE).
