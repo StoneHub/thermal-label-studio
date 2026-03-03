@@ -1,14 +1,33 @@
 # Thermal Label Studio
 
-Interactive label composer for 4x6 thermal labels (800x1200 @ 203 DPI). Mobile-first design, desktop keyboard shortcuts, template system, and automation API.
+Design, preview, and automate 4x6 thermal labels with a modern editor and API.
 
-## Workspace Layout
+Thermal Label Studio combines:
+- a visual label editor (`apps/web`)
+- a local automation/print API (`apps/api`)
+- shared schema + layer logic (`packages/core`)
+- reusable template packs (`packages/templates`)
 
-```
-apps/web        — React + Konva canvas editor (drag/resize/rotate, layers, templates)
-apps/api        — Express API (CRUD templates, render PNG, print jobs, automation)
-packages/core   — Shared types, layer helpers, snap/alignment, placeholders
-packages/templates — Starter template JSON packs
+Target canvas is `800x1200` (optimized for 4x6 @ 203 DPI workflows).
+
+## Highlights
+
+- Drag-and-drop multi-layer canvas (text, shapes, images)
+- Image upload + reusable image library
+- Clipboard image paste (`Ctrl/Cmd+V`)
+- Snap guides, grid, transforms, z-order controls
+- Undo/redo history
+- Template browser + local template saves
+- Mobile-friendly editing layout
+- API for template ops, render, and print-job orchestration
+
+## Project Structure
+
+```text
+apps/web             React + Vite + Konva editor
+apps/api             Express API for templates/render/print jobs
+packages/core        Shared types and editor helpers
+packages/templates   Starter template packs
 ```
 
 ## Quick Start
@@ -18,112 +37,102 @@ pnpm install
 pnpm dev
 ```
 
-Starts API + web in watch mode.
+Services:
+- Web: `http://localhost:5173`
+- API: `http://localhost:3001`
 
-| Service | URL |
-|---------|-----|
-| Web editor | `http://localhost:5173` |
-| API | `http://localhost:3001` |
-
-## Build & Test
+## LAN / Device Testing
 
 ```bash
-pnpm build       # Build all packages
-pnpm test        # Run vitest test suite
-pnpm test:watch  # Watch mode
-pnpm typecheck   # TypeScript check
+pnpm dev:share
 ```
 
-## Editor Features
+Prints LAN-accessible URLs for web + API.
 
-### Canvas Editor
-- **Multi-layer editing**: Text, shapes (rect/circle), and images on an 800x1200 canvas
-- **Transform controls**: Drag to move, handles to resize, rotate anchor for rotation
-- **Snap guides**: Layers snap to canvas edges, centers, and other layer edges (toggle with toolbar)
-- **Grid overlay**: 25px grid for alignment (toggle with toolbar)
-- **Z-order**: Bring forward/backward, send to front/back
-- **Undo/redo**: Full history with 50-step limit
+Optional public tunnel:
 
-### Layer Properties
-- **Text**: Font family, size, weight, alignment, color
-- **Shapes**: Fill, stroke, corner radius, stroke width
-- **Images**: Upload, fit mode (contain/cover/fill)
-- **All layers**: Position (X/Y), size (W/H), rotation, opacity, lock, visibility
+```bash
+pnpm dev:share:public
+```
 
-### Templates
-- 9 built-in templates: shipping, drawer labels, craft supplies, storage boxes, feeding charts, instruction lists, sticker sheets
-- Save current canvas as a reusable template (localStorage)
-- Template browser with category filter (Full 4x6 / Sticker Sheet)
-- Placeholder fields with `{{key}}` substitution
+Requires `cloudflared`.
 
-### Keyboard Shortcuts (Desktop)
-| Key | Action |
-|-----|--------|
-| `T` | Add text layer |
-| `R` | Add rectangle |
-| `Delete` / `Backspace` | Delete selected |
-| `Ctrl+Z` | Undo |
-| `Ctrl+Shift+Z` / `Ctrl+Y` | Redo |
-| `Ctrl+C` / `Ctrl+V` | Copy / Paste |
-| `Ctrl+D` | Duplicate |
-| `Ctrl+A` | Select all |
-| `Arrow keys` | Nudge (1px, +Shift 10px) |
-| `Ctrl+]` / `Ctrl+[` | Z-order forward/backward |
-| `Ctrl+=` / `Ctrl+-` | Zoom in/out |
-| `Ctrl+0` | Reset zoom |
-| `Escape` | Deselect all |
+## Scripts
 
-### Mobile
-- Bottom tab navigation: Layers / Canvas / Properties
-- Touch: tap to select, drag to move, pinch to zoom canvas
-- Responsive layout adapts at 768px breakpoint
+```bash
+pnpm dev           # run all dev services
+pnpm build         # build all packages
+pnpm typecheck     # TS checks
+pnpm test          # vitest
+pnpm test:watch    # vitest watch mode
+```
 
-## API Endpoints
+## Keyboard Shortcuts
+
+- `T`: Add text
+- `R`: Add rectangle
+- `Delete` / `Backspace`: Delete selected
+- `Ctrl/Cmd + Z`: Undo
+- `Ctrl/Cmd + Shift + Z` or `Ctrl/Cmd + Y`: Redo
+- `Ctrl/Cmd + C`: Copy selected layers
+- `Ctrl/Cmd + V`: Paste layers or pasted clipboard image
+- `Ctrl/Cmd + D`: Duplicate
+- `Ctrl/Cmd + A`: Select all
+- `Arrow Keys`: Nudge (`Shift` = 10px)
+- `Ctrl/Cmd + ]` / `Ctrl/Cmd + [`: Z-order
+- `Ctrl/Cmd + +/-/0`: Zoom controls
+
+## API Overview
 
 ### Health
-```
-GET /health → { ok, service, version }
+
+```http
+GET /health
 ```
 
 ### Templates
-```
-GET    /templates?category=all|full|sticker   → { templates[] }
-GET    /templates/:id                         → { template }
-GET    /templates/:id/schema                  → { fields, canvasSize }
-POST   /templates                             → { ok, id }
-DELETE /templates/:id                         → { ok, deleted }
-POST   /templates/:id/apply                   → { template }
-PATCH  /templates/:id/fields                  → { ok, template }
-POST   /templates/:id/render                  → { ok, width, height, pngBase64 }
+
+```http
+GET    /templates?category=all|full|sticker
+GET    /templates/:id
+GET    /templates/:id/schema
+POST   /templates
+DELETE /templates/:id
+POST   /templates/:id/apply
+PATCH  /templates/:id/fields
+POST   /templates/:id/render
 ```
 
 ### Render
+
+```http
+POST /render/from-canvas
 ```
-POST /render/from-canvas   → { ok, width, height, pngBase64 }
-  body: { pngDataUrl: "data:image/png;base64,..." }
+
+Body:
+
+```json
+{ "pngDataUrl": "data:image/png;base64,..." }
 ```
 
 ### Print Jobs
-```
-POST /print/jobs           → { ok, jobId, status }
-  body: { templateId, overrides?, copies? }
-GET  /print/jobs           → { jobs[] }
-GET  /print/jobs/:id       → { job }
+
+```http
+POST /print/jobs
+GET  /print/jobs
+GET  /print/jobs/:id
 ```
 
-## OpenClaw Automation Examples
+## Automation Examples
 
-### List available templates
+List templates:
+
 ```bash
 curl http://localhost:3001/templates | jq '.templates[].name'
 ```
 
-### Get template schema (for automation)
-```bash
-curl http://localhost:3001/templates/shipping-label/schema | jq
-```
+Render with overrides:
 
-### Render a label with overrides
 ```bash
 curl -X POST http://localhost:3001/templates/shipping-label/render \
   -H "Content-Type: application/json" \
@@ -131,40 +140,22 @@ curl -X POST http://localhost:3001/templates/shipping-label/render \
   | jq -r '.pngBase64' | base64 -d > label.png
 ```
 
-### Queue a print job
+Queue a print job:
+
 ```bash
 curl -X POST http://localhost:3001/print/jobs \
   -H "Content-Type: application/json" \
   -d '{"templateId":"shipping-label","overrides":{"name":"Bob"},"copies":2}'
 ```
 
-### Telegram automation flow
-```
-User → "Print a drawer label for Socks"
-Bot → GET /templates/drawer-label/schema
-Bot → POST /templates/drawer-label/render { overrides: { title: "Socks" } }
-Bot → POST /print/jobs { templateId: "drawer-label", overrides: { title: "Socks" } }
-Bot → "Label printed! Here's a preview: [image]"
-```
+## Current Status
 
-## Phone / LAN Testing
+The editor is production-leaning for design/testing flows. Next priority areas:
+- real printer execution pipeline + robust job status
+- render parity between editor and API output
+- persistent shared asset/template storage
+- agent-assisted design suggestions and auto-fix workflows
 
-### Same Wi-Fi
-```bash
-pnpm dev:share
-```
-Prints LAN URLs for both web and API.
+## License
 
-### Public tunnel
-```bash
-pnpm dev:share:public
-```
-Requires `cloudflared`; prints a temporary `https://...trycloudflare.com` URL.
-
-## Architecture Notes
-
-- Canvas: 800x1200px target (matches 4x6" @ 203 DPI thermal printer)
-- Frontend renders via Konva (HTML5 Canvas) for WYSIWYG editing
-- API renders structural PNG (block-level) for server-side automation
-- Print pipeline contract: `thermal_print.sh --input <png> --copies <n>`
-- Templates use `{{placeholder}}` syntax for field substitution
+Private project by default. Add a license if you plan to make it public.
