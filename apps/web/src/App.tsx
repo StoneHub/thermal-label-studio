@@ -45,21 +45,13 @@ const sampleDocument: LabelDocument = {
   ],
 };
 
-const workspaceDocument = (workspace: Workspace, fallback: LabelDocument): LabelDocument => {
-  return workspace.getDocument(fallback.id) ?? fallback;
-};
-
-const workspaceCommand = (workspace: Workspace, next: WorkspaceCommand): LabelDocument => {
-  return workspace.execute(next).document;
-};
-
 const App: React.FC = () => {
   const workspace = useMemo(() => {
     const next = createLabelWorkspace();
     next.execute({ type: "create-document", document: sampleDocument });
     return next;
   }, []);
-  const [document, setDocument] = useState<LabelDocument>(() => workspaceDocument(workspace, sampleDocument));
+  const [document, setDocument] = useState<LabelDocument>(() => workspace.getDocument(sampleDocument.id) ?? sampleDocument);
   const [artifact, setArtifact] = useState<RenderArtifact>(() => workspace.render(sampleDocument.id));
   const [selectedId, setSelectedId] = useState("sample-heading");
   const [nameDraft, setNameDraft] = useState(document.name);
@@ -70,7 +62,7 @@ const App: React.FC = () => {
 
   const apply = useCallback(
     (next: WorkspaceCommand) => {
-      const nextDocument = workspaceCommand(workspace, next);
+      const nextDocument = workspace.execute(next).document;
       setDocument(nextDocument);
       setArtifact(workspace.render(nextDocument.id));
     },
@@ -199,7 +191,7 @@ const App: React.FC = () => {
             ) : <p className="empty-copy">Select an element to edit or move it.</p>}
           </section>
 
-          <p className="scope-note"><span aria-hidden="true">↗</span> Fleet delivery is outside this slice.</p>
+          <p className="scope-note"><span aria-hidden="true">↗</span> Fleet delivery and MCP session sync are outside this slice.</p>
         </aside>
 
         <section className="preview-column">

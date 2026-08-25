@@ -36,8 +36,9 @@ The server registers exactly three tools:
 
 - `label_create` creates a `LabelDocument`.
 - `label_edit` applies the supported `WorkspaceCommand` variants
-  `rename-document`, `add-text`, `update-text`, `move-element`, and
-  `remove-element`. The server adds the target `documentId` to each command.
+  `rename-document`, `add-text`, `add-rectangle`, `update-text`,
+  `move-element`, and `remove-element`. The server adds the target
+  `documentId` to each command.
 - `label_preview` returns document metadata and the SVG source from a
   `RenderArtifact`.
 

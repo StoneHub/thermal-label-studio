@@ -6,11 +6,8 @@
   "scripts": {
     "dev": "pnpm --filter @tls/web dev",
     "dev:mcp": "pnpm --filter @tls/mcp dev",
-    "dev:legacy-api": "pnpm --filter @tls/api dev",
     "build": "pnpm --filter @tls/core build && pnpm --filter @tls/mcp build && pnpm --filter @tls/web build",
-    "build:legacy-api": "pnpm --filter @tls/core build && pnpm --filter @tls/templates build && pnpm --filter @tls/api build",
     "typecheck": "pnpm --filter @tls/core typecheck && pnpm --filter @tls/mcp typecheck && pnpm --filter @tls/web typecheck",
-    "typecheck:legacy-api": "pnpm --filter @tls/templates build && pnpm --filter @tls/api typecheck",
     "lint": "pnpm -r lint",
     "test": "vitest run",
     "test:watch": "vitest"

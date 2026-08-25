@@ -2,7 +2,7 @@
 
 Thermal Label Studio is a local label workspace for people and agents. The current rewrite gives both the web review UI and the MCP adapter the same document-editing and SVG preview behavior.
 
-Printer discovery and delivery belong to Fleet. This repository does not open raw printer sockets, submit print jobs, or claim that a physical label printed.
+Printer discovery and delivery belong to Fleet. This repository does not open raw printer sockets, create PrintIntents, or claim that a physical label printed.
 
 ## Current slice
 
@@ -11,6 +11,8 @@ Printer discovery and delivery belong to Fleet. This repository does not open ra
 - `apps/web`: small human review UI using the same Workspace and renderer
 
 The old Konva editor and Express app remain in Git history and the working tree as reference while the rewrite proves its replacement seams. The Express app is not part of the default development command.
+
+Both adapters currently keep their own in-memory session. MCP edits do not appear automatically in the web reviewer yet.
 
 ## Run the review UI
 
@@ -47,7 +49,7 @@ pnpm build
 
 - `PLAN.md` describes the retired OFFNOVA and OpenClaw direction.
 - `RELEASE_NOTES_V1_DRAFT.md` describes the pre-rewrite editor.
-- `apps/api` is the old local HTTP app and simulated print queue. Start it only with `pnpm dev:legacy-api` when inspecting legacy behavior.
+- `apps/api` is retained source reference and excluded from the default development, build, and typecheck commands.
 
 ## License
 

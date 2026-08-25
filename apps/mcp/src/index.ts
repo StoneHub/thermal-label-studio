@@ -36,28 +36,34 @@ const AddTextCommandSchema = z.object({
   fontWeight: z.number().positive().optional(),
 });
 
+const AddRectangleCommandSchema = z.object({
+  type: z.literal("add-rectangle"),
+  elementId: z.string().min(1).optional(),
+  x: z.number().optional(),
+  y: z.number().optional(),
+  width: z.number().positive().optional(),
+  height: z.number().positive().optional(),
+  fill: z.string().optional(),
+  stroke: z.string().optional(),
+  strokeWidth: z.number().nonnegative().optional(),
+  rx: z.number().nonnegative().optional(),
+  ry: z.number().nonnegative().optional(),
+});
+
+const TextUpdatesSchema = z.object({
+  text: z.string().optional(),
+  fontSize: z.number().positive().optional(),
+  fill: z.string().optional(),
+  fontFamily: z.string().optional(),
+  fontWeight: z.number().positive().optional(),
+});
+
 const UpdateTextCommandSchema = z.object({
   type: z.literal("update-text"),
   elementId: z.string().min(1),
   text: z.string().optional(),
-  updates: z
-    .object({
-      text: z.string().optional(),
-      fontSize: z.number().positive().optional(),
-      fill: z.string().optional(),
-      fontFamily: z.string().optional(),
-      fontWeight: z.number().positive().optional(),
-    })
-    .optional(),
-  patch: z
-    .object({
-      text: z.string().optional(),
-      fontSize: z.number().positive().optional(),
-      fill: z.string().optional(),
-      fontFamily: z.string().optional(),
-      fontWeight: z.number().positive().optional(),
-    })
-    .optional(),
+  updates: TextUpdatesSchema.optional(),
+  patch: TextUpdatesSchema.optional(),
 });
 
 const MoveElementCommandSchema = z.object({
@@ -77,6 +83,7 @@ const RemoveElementCommandSchema = z.object({
 const EditCommandSchema = z.discriminatedUnion("type", [
   RenameDocumentCommandSchema,
   AddTextCommandSchema,
+  AddRectangleCommandSchema,
   UpdateTextCommandSchema,
   MoveElementCommandSchema,
   RemoveElementCommandSchema,
