@@ -1,5 +1,7 @@
 # Thermal Label Studio — Implementation Plan
 
+> Retired reference. This plan targets one OFFNOVA printer and lets the local app own printing. The current rewrite is defined by `README.md` and `CONTEXT.md`; Fleet owns printer delivery.
+
 ## 1) Objective
 Build an execution-ready Thermal Label Studio that supports:
 - Visual 4x6 label design/editing
