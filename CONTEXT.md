@@ -16,6 +16,10 @@ _Avoid_: saved label, preset
 An immutable rendered form of a specific LabelDocument revision, suitable for preview or later print preparation.
 _Avoid_: export, output image
 
+**ImportedArtwork**:
+Raster content brought into a LabelDocument from an image, clipboard item, or document page.
+_Avoid_: asset blob, uploaded file
+
 **PrinterProfile**:
 A description of a printer's supported media, dimensions, resolution, and delivery capabilities.
 _Avoid_: printer config, host and port

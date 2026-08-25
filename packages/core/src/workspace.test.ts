@@ -63,6 +63,58 @@ describe("LabelWorkspace", () => {
     expect(() => workspace.execute({ type: "add-text", documentId: "label", element: { id: "text" } })).not.toThrow();
     expect(() => workspace.execute({ type: "add-text", documentId: "label", element: { id: "text" } })).toThrow(/already in use/);
   });
+
+  it("adds raster images and duplicates any element without mutating the source", () => {
+    const workspace = createLabelWorkspace();
+    workspace.execute({ type: "create-document", documentId: "label", name: "Label", size: { width: 200, height: 200 } });
+    workspace.execute({ type: "add-text", documentId: "label", element: { id: "title", x: 10, y: 15, text: "Title" } });
+    workspace.execute({
+      type: "add-image",
+      documentId: "label",
+      element: {
+        id: "logo",
+        x: 20,
+        y: 25,
+        width: 40,
+        height: 30,
+        source: "data:image/png;base64,AAAA",
+        alt: "Logo",
+      },
+    });
+
+    const beforeDuplicate = workspace.getDocument("label")!;
+    const source = beforeDuplicate.elements[1];
+    const change = workspace.execute({
+      type: "duplicate-element",
+      documentId: "label",
+      elementId: "logo",
+      newElementId: "logo-copy",
+      dx: 5,
+      dy: -3,
+    });
+
+    expect(change.document.elements.map((element) => element.id)).toEqual(["title", "logo", "logo-copy"]);
+    expect(change.document.elements[2]).toMatchObject({
+      id: "logo-copy",
+      type: "image",
+      x: 25,
+      y: 22,
+      source: "data:image/png;base64,AAAA",
+      alt: "Logo",
+    });
+    expect(source).toEqual(beforeDuplicate.elements[1]);
+    expect(change.document.revision).toBe(3);
+  });
+
+  it("rejects non-raster image sources", () => {
+    const workspace = createLabelWorkspace();
+    workspace.execute({ type: "create-document", documentId: "label", name: "Label", size: { width: 100, height: 100 } });
+    expect(() => workspace.execute({
+      type: "add-image",
+      documentId: "label",
+      element: { id: "bad", source: "data:image/svg+xml;base64,PHN2Zy8+" },
+    })).toThrow(/PNG, JPEG, or WebP base64 data URL/);
+  });
 });
 
 describe("renderLabelDocument", () => {
@@ -78,7 +130,31 @@ describe("renderLabelDocument", () => {
     expect(artifact).toMatchObject({ documentId: "label<&", revision: 2, width: 120, height: 80, mimeType: "image/svg+xml" });
     expect(workspaceArtifact.source).toBe(artifact.source);
     expect(artifact.source.indexOf('id="background"')).toBeLessThan(artifact.source.indexOf('id="title"'));
+    expect(artifact.source).toContain('data-element-id="background"');
+    expect(artifact.source).toContain('data-element-id="title"');
     expect(artifact.source).toContain("&lt;&amp;&quot;");
     expect(Object.isFrozen(artifact)).toBe(true);
+  });
+
+  it("renders escaped image attributes with contain semantics", () => {
+    const workspace = createLabelWorkspace();
+    workspace.execute({ type: "create-document", documentId: "label", name: "Preview", size: { width: 120, height: 80 } });
+    workspace.execute({
+      type: "add-image",
+      documentId: "label",
+      element: {
+        id: "photo<&\"",
+        width: 40,
+        height: 30,
+        source: "data:image/webp;base64,AAAA",
+        alt: "A <photo> & \"caption\"",
+      },
+    });
+
+    const source = workspace.render("label").source;
+    expect(source).toContain('<image data-element-id="photo&lt;&amp;&quot;" id="photo&lt;&amp;&quot;"');
+    expect(source).toContain('href="data:image/webp;base64,AAAA"');
+    expect(source).toContain('preserveAspectRatio="xMidYMid meet"');
+    expect(source).toContain('aria-label="A &lt;photo&gt; &amp; &quot;caption&quot;"');
   });
 });

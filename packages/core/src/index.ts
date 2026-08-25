@@ -387,12 +387,15 @@ export {
   createLabelWorkspace,
 } from "./workspace.js";
 export type {
+  AddImageCommand,
   AddRectangleCommand,
   AddTextCommand,
   CreateDocumentCommand,
+  DuplicateElementCommand,
   LabelDocument,
   LabelDocumentSize,
   LabelElement,
+  LabelImageElement,
   LabelRectangleElement,
   LabelTextElement,
   LabelWorkspace,

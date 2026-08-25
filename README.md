@@ -1,6 +1,6 @@
 # Thermal Label Studio
 
-Thermal Label Studio is a local label workspace for people and agents. The current rewrite gives both the web review UI and the MCP adapter the same document-editing and SVG preview behavior.
+Thermal Label Studio is a local label editor for people and software agents. The web app supports direct canvas editing, while the MCP adapter exposes the same document and rendering core to other software.
 
 Printer discovery and delivery belong to Fleet. This repository does not open raw printer sockets, create PrintIntents, or claim that a physical label printed.
 
@@ -8,13 +8,13 @@ Printer discovery and delivery belong to Fleet. This repository does not open ra
 
 - `packages/core`: canonical `LabelDocument`, Workspace edits, and SVG `RenderArtifact` generation
 - `apps/mcp`: local stdio tools for creating, editing, and previewing labels
-- `apps/web`: small human review UI using the same Workspace and renderer
+- `apps/web`: human editor with direct dragging, element copy/paste, and image or PDF import
 
 The old Konva editor and Express app remain in Git history and the working tree as reference while the rewrite proves its replacement seams. The Express app is not part of the default development command.
 
-Both adapters currently keep their own in-memory session. MCP edits do not appear automatically in the web reviewer yet.
+Both adapters currently keep their own in-memory session. MCP edits do not appear automatically in the web editor yet.
 
-## Run the review UI
+## Run the label editor
 
 ```bash
 pnpm install
@@ -29,7 +29,7 @@ Open `http://localhost:5173`.
 pnpm dev:mcp
 ```
 
-See `apps/mcp/README.md` for host configuration and proof limits.
+See `apps/mcp/README.md` for local client configuration and current boundaries.
 
 ## Verification
 

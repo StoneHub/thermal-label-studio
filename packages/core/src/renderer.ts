@@ -1,4 +1,4 @@
-import type { LabelDocument, LabelElement, LabelRectangleElement, LabelTextElement } from "./workspace.js";
+import type { LabelDocument, LabelElement, LabelImageElement, LabelRectangleElement, LabelTextElement } from "./workspace.js";
 
 export interface RenderArtifact {
   readonly documentId: string;
@@ -22,9 +22,13 @@ function attribute(name: string, value: string | number): string {
   return ` ${name}="${escapeXml(String(value))}"`;
 }
 
+function elementAttributes(element: LabelElement): string[] {
+  return [attribute("data-element-id", element.id), attribute("id", element.id)];
+}
+
 function textElement(element: LabelTextElement): string {
   const attrs = [
-    attribute("id", element.id),
+    ...elementAttributes(element),
     attribute("x", element.x),
     attribute("y", element.y),
     attribute("width", element.width),
@@ -39,7 +43,7 @@ function textElement(element: LabelTextElement): string {
 
 function rectangleElement(element: LabelRectangleElement): string {
   const attrs = [
-    attribute("id", element.id),
+    ...elementAttributes(element),
     attribute("x", element.x),
     attribute("y", element.y),
     attribute("width", element.width),
@@ -53,8 +57,24 @@ function rectangleElement(element: LabelRectangleElement): string {
   return `<rect${attrs}/>`;
 }
 
+function imageElement(element: LabelImageElement): string {
+  const attrs = [
+    ...elementAttributes(element),
+    attribute("x", element.x),
+    attribute("y", element.y),
+    attribute("width", element.width),
+    attribute("height", element.height),
+    attribute("href", element.source),
+    attribute("preserveAspectRatio", "xMidYMid meet"),
+    ...(element.alt === undefined ? [] : [attribute("aria-label", element.alt)]),
+  ].join("");
+  return `<image${attrs}/>`;
+}
+
 function renderElement(element: LabelElement): string {
-  return element.type === "text" ? textElement(element) : rectangleElement(element);
+  if (element.type === "text") return textElement(element);
+  if (element.type === "rectangle") return rectangleElement(element);
+  return imageElement(element);
 }
 
 export function renderLabelDocument(document: LabelDocument): RenderArtifact {

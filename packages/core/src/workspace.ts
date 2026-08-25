@@ -36,7 +36,18 @@ export interface LabelRectangleElement {
   readonly ry?: number;
 }
 
-export type LabelElement = LabelTextElement | LabelRectangleElement;
+export interface LabelImageElement {
+  readonly id: string;
+  readonly type: "image";
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  readonly source: string;
+  readonly alt?: string;
+}
+
+export type LabelElement = LabelTextElement | LabelRectangleElement | LabelImageElement;
 
 export interface LabelDocument {
   readonly schemaVersion: typeof LABEL_DOCUMENT_SCHEMA_VERSION;
@@ -126,6 +137,28 @@ export interface AddRectangleCommand {
   readonly ry?: number;
 }
 
+export interface AddImageCommand {
+  readonly type: "add-image";
+  readonly documentId: string;
+  readonly element?: Partial<LabelImageElement> & { readonly id: string };
+  readonly elementId?: string;
+  readonly x?: number;
+  readonly y?: number;
+  readonly width?: number;
+  readonly height?: number;
+  readonly source?: string;
+  readonly alt?: string;
+}
+
+export interface DuplicateElementCommand {
+  readonly type: "duplicate-element";
+  readonly documentId: string;
+  readonly elementId: string;
+  readonly newElementId: string;
+  readonly dx?: number;
+  readonly dy?: number;
+}
+
 export type WorkspaceCommand =
   | CreateDocumentCommand
   | RenameDocumentCommand
@@ -133,7 +166,9 @@ export type WorkspaceCommand =
   | UpdateTextCommand
   | MoveElementCommand
   | RemoveElementCommand
-  | AddRectangleCommand;
+  | AddRectangleCommand
+  | AddImageCommand
+  | DuplicateElementCommand;
 
 export interface WorkspaceChange {
   readonly type: WorkspaceCommand["type"];
@@ -197,6 +232,13 @@ function requireNonNegativeFinite(value: unknown, label: string): number {
   return finite;
 }
 
+function requireRasterDataUrl(value: unknown, label: string): string {
+  if (typeof value !== "string" || !/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(value)) {
+    fail("invalid-document", `${label} must be a PNG, JPEG, or WebP base64 data URL`);
+  }
+  return value;
+}
+
 function clone<T>(value: T): T {
   if (Array.isArray(value)) return value.map(clone) as T;
   if (!isRecord(value)) return value;
@@ -219,8 +261,8 @@ function validateElement(value: unknown, index: number): LabelElement {
   if (!isRecord(value)) fail("invalid-document", `elements[${index}] must be an object`);
   const id = requireString(value.id, `elements[${index}].id`);
   const type = value.type;
-  if (type !== "text" && type !== "rectangle") {
-    fail("invalid-document", `elements[${index}].type must be text or rectangle`);
+  if (type !== "text" && type !== "rectangle" && type !== "image") {
+    fail("invalid-document", `elements[${index}].type must be text, rectangle, or image`);
   }
   const base = {
     id,
@@ -242,6 +284,15 @@ function validateElement(value: unknown, index: number): LabelElement {
       ...(value.fontWeight === undefined ? {} : { fontWeight: requirePositive(value.fontWeight, `elements[${index}].fontWeight`) }),
     };
     return element;
+  }
+  if (type === "image") {
+    const image: LabelImageElement = {
+      ...base,
+      type,
+      source: requireRasterDataUrl(value.source, `elements[${index}].source`),
+      ...(value.alt === undefined ? {} : { alt: typeof value.alt === "string" ? value.alt : fail("invalid-document", `elements[${index}].alt must be a string`) }),
+    };
+    return image;
   }
   const rectangle: LabelRectangleElement = {
     ...base,
@@ -403,6 +454,35 @@ export function createLabelWorkspace(initialDocuments: readonly NewLabelDocument
           ry: command.ry ?? supplied.ry,
         }, previous.elements.length);
         return replace(updatedDocument(previous, [...previous.elements, element]), previous, command);
+      }
+      case "add-image": {
+        const previous = getKnownDocument(command.documentId);
+        const supplied: Partial<LabelImageElement> = command.element ?? {};
+        const id = elementId(supplied, command.elementId);
+        if (previous.elements.some((element) => element.id === id)) fail("duplicate-id", `Element id "${id}" is already in use in document "${previous.id}"`);
+        const element = validateElement({
+          id,
+          type: "image",
+          x: command.x ?? supplied.x ?? 0,
+          y: command.y ?? supplied.y ?? 0,
+          width: command.width ?? supplied.width ?? 100,
+          height: command.height ?? supplied.height ?? 100,
+          source: command.source ?? supplied.source,
+          alt: command.alt ?? supplied.alt,
+        }, previous.elements.length);
+        return replace(updatedDocument(previous, [...previous.elements, element]), previous, command);
+      }
+      case "duplicate-element": {
+        const previous = getKnownDocument(command.documentId);
+        const source = findElement(previous, command.elementId);
+        const newElementId = requireString(command.newElementId, "newElementId");
+        if (previous.elements.some((element) => element.id === newElementId)) fail("duplicate-id", `Element id "${newElementId}" is already in use in document "${previous.id}"`);
+        const dx = command.dx ?? 20;
+        const dy = command.dy ?? 20;
+        requireFinite(dx, "dx");
+        requireFinite(dy, "dy");
+        const duplicate = validateElement({ ...source, id: newElementId, x: source.x + dx, y: source.y + dy }, previous.elements.length);
+        return replace(updatedDocument(previous, [...previous.elements, duplicate]), previous, command);
       }
       case "update-text": {
         const previous = getKnownDocument(command.documentId);

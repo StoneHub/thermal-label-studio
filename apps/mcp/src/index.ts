@@ -50,6 +50,25 @@ const AddRectangleCommandSchema = z.object({
   ry: z.number().nonnegative().optional(),
 });
 
+const AddImageCommandSchema = z.object({
+  type: z.literal("add-image"),
+  elementId: z.string().min(1).optional(),
+  source: z.string().startsWith("data:image/"),
+  alt: z.string().optional(),
+  x: z.number().optional(),
+  y: z.number().optional(),
+  width: z.number().positive().optional(),
+  height: z.number().positive().optional(),
+});
+
+const DuplicateElementCommandSchema = z.object({
+  type: z.literal("duplicate-element"),
+  elementId: z.string().min(1),
+  newElementId: z.string().min(1),
+  dx: z.number().optional(),
+  dy: z.number().optional(),
+});
+
 const TextUpdatesSchema = z.object({
   text: z.string().optional(),
   fontSize: z.number().positive().optional(),
@@ -84,6 +103,8 @@ const EditCommandSchema = z.discriminatedUnion("type", [
   RenameDocumentCommandSchema,
   AddTextCommandSchema,
   AddRectangleCommandSchema,
+  AddImageCommandSchema,
+  DuplicateElementCommandSchema,
   UpdateTextCommandSchema,
   MoveElementCommandSchema,
   RemoveElementCommandSchema,
