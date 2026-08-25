@@ -378,3 +378,34 @@ export const alignLayers = (
       return layers;
   }
 };
+
+// ── First-slice document workspace and SVG renderer ─────────────
+
+export {
+  LABEL_DOCUMENT_SCHEMA_VERSION,
+  WorkspaceError,
+  createLabelWorkspace,
+} from "./workspace.js";
+export type {
+  AddImageCommand,
+  AddRectangleCommand,
+  AddTextCommand,
+  CreateDocumentCommand,
+  DuplicateElementCommand,
+  LabelDocument,
+  LabelDocumentSize,
+  LabelElement,
+  LabelImageElement,
+  LabelRectangleElement,
+  LabelTextElement,
+  LabelWorkspace,
+  MoveElementCommand,
+  NewLabelDocument,
+  RemoveElementCommand,
+  RenameDocumentCommand,
+  UpdateTextCommand,
+  WorkspaceChange,
+  WorkspaceCommand,
+} from "./workspace.js";
+export { renderLabelDocument } from "./renderer.js";
+export type { RenderArtifact } from "./renderer.js";

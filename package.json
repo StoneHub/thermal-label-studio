@@ -4,11 +4,10 @@
   "version": "0.1.0",
   "packageManager": "pnpm@9.15.0",
   "scripts": {
-    "dev": "pnpm -r --parallel dev",
-    "dev:share": "bash ./scripts/dev-share.sh",
-    "dev:share:public": "bash ./scripts/dev-share.sh --public",
-    "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck",
+    "dev": "pnpm --filter @tls/web dev",
+    "dev:mcp": "pnpm --filter @tls/mcp dev",
+    "build": "pnpm --filter @tls/core build && pnpm --filter @tls/mcp build && pnpm --filter @tls/web build",
+    "typecheck": "pnpm --filter @tls/core typecheck && pnpm --filter @tls/mcp typecheck && pnpm --filter @tls/web typecheck",
     "lint": "pnpm -r lint",
     "test": "vitest run",
     "test:watch": "vitest"

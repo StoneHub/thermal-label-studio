@@ -1,5 +1,7 @@
 # Thermal Label Studio — V1 Release Notes (DRAFT)
 
+> Legacy reference for the pre-rewrite Konva editor. This is not a current release plan or statement of current behavior.
+
 ## Overview
 
 V1 transforms the MVP from a basic template-fill form into a full interactive label composer with a canvas editor, template system, automation API, and mobile support.
