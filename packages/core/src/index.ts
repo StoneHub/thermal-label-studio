@@ -404,6 +404,7 @@ export type {
   RemoveElementCommand,
   RenameDocumentCommand,
   UpdateTextCommand,
+  UpdateImageCommand,
   WorkspaceChange,
   WorkspaceCommand,
 } from "./workspace.js";

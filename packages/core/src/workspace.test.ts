@@ -106,6 +106,33 @@ describe("LabelWorkspace", () => {
     expect(change.document.revision).toBe(3);
   });
 
+  it("updates image crop and quarter-turn orientation deterministically", () => {
+    const workspace = createLabelWorkspace();
+    workspace.execute({ type: "create-document", documentId: "label", name: "Label", size: { width: 200, height: 200 } });
+    workspace.execute({
+      type: "add-image",
+      documentId: "label",
+      element: { id: "photo", width: 80, height: 120, source: "data:image/png;base64,AAAA" },
+    });
+
+    const change = workspace.execute({
+      type: "update-image",
+      documentId: "label",
+      elementId: "photo",
+      fit: "cover",
+      rotation: 90,
+    });
+
+    expect(change.document.revision).toBe(2);
+    expect(change.document.elements[0]).toMatchObject({ fit: "cover", rotation: 90 });
+    expect(() => workspace.execute({
+      type: "update-image",
+      documentId: "label",
+      elementId: "photo",
+      rotation: 45,
+    } as never)).toThrow(/must be 0, 90, 180, or 270/);
+  });
+
   it("rejects non-raster image sources", () => {
     const workspace = createLabelWorkspace();
     workspace.execute({ type: "create-document", documentId: "label", name: "Label", size: { width: 100, height: 100 } });
@@ -156,5 +183,28 @@ describe("renderLabelDocument", () => {
     expect(source).toContain('href="data:image/webp;base64,AAAA"');
     expect(source).toContain('preserveAspectRatio="xMidYMid meet"');
     expect(source).toContain('aria-label="A &lt;photo&gt; &amp; &quot;caption&quot;"');
+  });
+
+  it("renders centered cover crop and quarter-turn orientation", () => {
+    const workspace = createLabelWorkspace();
+    workspace.execute({ type: "create-document", documentId: "label", name: "Preview", size: { width: 120, height: 80 } });
+    workspace.execute({
+      type: "add-image",
+      documentId: "label",
+      element: {
+        id: "photo",
+        x: 10,
+        y: 20,
+        width: 40,
+        height: 30,
+        source: "data:image/png;base64,AAAA",
+        fit: "cover",
+        rotation: 270,
+      },
+    });
+
+    const source = workspace.render("label").source;
+    expect(source).toContain('preserveAspectRatio="xMidYMid slice"');
+    expect(source).toContain('<g transform="rotate(270 30 35)">');
   });
 });

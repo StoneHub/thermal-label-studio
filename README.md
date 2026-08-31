@@ -2,13 +2,13 @@
 
 Thermal Label Studio is a local label editor for people and software agents. The web app supports direct canvas editing, while the MCP adapter exposes the same document and rendering core to other software.
 
-Printer discovery and delivery belong to Fleet. This repository does not open raw printer sockets, create PrintIntents, or claim that a physical label printed.
+Printer discovery and delivery belong to Fleet. The web app can prepare one fixed `PrintIntent` for Fleet's OFFNOVA adapter. This repository does not open raw printer sockets or claim that a physical label printed.
 
 ## Current slice
 
 - `packages/core`: canonical `LabelDocument`, Workspace edits, and SVG `RenderArtifact` generation
 - `apps/mcp`: local stdio tools for creating, editing, and previewing labels
-- `apps/web`: human editor with direct dragging, element copy/paste, and image or PDF import
+- `apps/web`: static human editor with direct dragging, deterministic centered crop or whole-image fit, quarter-turn rotation, element copy/paste, image or PDF import, and one-attempt `PrintIntent` preparation
 
 The old Konva editor and Express app remain in Git history and the working tree as reference while the rewrite proves its replacement seams. The Express app is not part of the default development command.
 
@@ -22,6 +22,8 @@ pnpm dev
 ```
 
 Open `http://localhost:5173`.
+
+The production web build uses relative assets and system fonts. It can be served as static files by the Pi print node without running Node.js on the Pi.
 
 ## Run the MCP adapter
 

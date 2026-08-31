@@ -59,6 +59,15 @@ const AddImageCommandSchema = z.object({
   y: z.number().optional(),
   width: z.number().positive().optional(),
   height: z.number().positive().optional(),
+  fit: z.enum(["contain", "cover"]).optional(),
+  rotation: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]).optional(),
+});
+
+const UpdateImageCommandSchema = z.object({
+  type: z.literal("update-image"),
+  elementId: z.string().min(1),
+  fit: z.enum(["contain", "cover"]).optional(),
+  rotation: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]).optional(),
 });
 
 const DuplicateElementCommandSchema = z.object({
@@ -104,6 +113,7 @@ const EditCommandSchema = z.discriminatedUnion("type", [
   AddTextCommandSchema,
   AddRectangleCommandSchema,
   AddImageCommandSchema,
+  UpdateImageCommandSchema,
   DuplicateElementCommandSchema,
   UpdateTextCommandSchema,
   MoveElementCommandSchema,

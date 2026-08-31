@@ -58,6 +58,9 @@ function rectangleElement(element: LabelRectangleElement): string {
 }
 
 function imageElement(element: LabelImageElement): string {
+  const rotation = element.rotation ?? 0;
+  const centerX = element.x + element.width / 2;
+  const centerY = element.y + element.height / 2;
   const attrs = [
     ...elementAttributes(element),
     attribute("x", element.x),
@@ -65,10 +68,11 @@ function imageElement(element: LabelImageElement): string {
     attribute("width", element.width),
     attribute("height", element.height),
     attribute("href", element.source),
-    attribute("preserveAspectRatio", "xMidYMid meet"),
+    attribute("preserveAspectRatio", element.fit === "cover" ? "xMidYMid slice" : "xMidYMid meet"),
     ...(element.alt === undefined ? [] : [attribute("aria-label", element.alt)]),
   ].join("");
-  return `<image${attrs}/>`;
+  const image = `<image${attrs}/>`;
+  return rotation === 0 ? image : `<g${attribute("transform", `rotate(${rotation} ${centerX} ${centerY})`)}>${image}</g>`;
 }
 
 function renderElement(element: LabelElement): string {
