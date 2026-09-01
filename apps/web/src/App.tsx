@@ -9,6 +9,8 @@ import {
 } from "@tls/core";
 import { fitArtworkWithin, importArtwork } from "./lib/artworkImport";
 import {
+  constrainImageGeometry,
+  frameImageToLabel,
   initialDocument,
   resizeImageFromCorner,
   withElementGeometry,
@@ -140,22 +142,31 @@ const App: React.FC = () => {
     if (!selected || selected.type !== "text") return;
     if (apply({ type: "update-text", documentId: document.id, elementId: selected.id, text: textDraft })) showStatus("Text updated");
   }, [apply, document.id, selected, showStatus, textDraft]);
-  const setImageFit = useCallback((fit: "contain" | "cover") => {
+  const frameImage = useCallback((fit: "contain" | "cover") => {
     if (!selected || selected.type !== "image") return;
-    if (apply({ type: "update-image", documentId: document.id, elementId: selected.id, fit })) {
-      showStatus(fit === "cover" ? "Centered crop applied" : "Whole image visible");
-    }
-  }, [apply, document.id, selected, showStatus]);
+    const geometry = frameImageToLabel(selected, document.size);
+    if (!apply({ type: "resize-element", documentId: document.id, elementId: selected.id, ...geometry })) return;
+    if (!apply({ type: "update-image", documentId: document.id, elementId: selected.id, fit })) return;
+    showStatus(fit === "cover" ? "Image fills the label" : "Whole image fitted to the label");
+  }, [apply, document.id, document.size, selected, showStatus]);
   const rotateImage = useCallback((direction: -1 | 1) => {
     if (!selected || selected.type !== "image") return;
     const turns = [0, 90, 180, 270] as const;
     const current = turns.indexOf(selected.rotation ?? 0);
     const rotation = turns[(current + direction + turns.length) % turns.length];
-    if (apply({ type: "update-image", documentId: document.id, elementId: selected.id, rotation })) {
-      showStatus(`Rotated to ${rotation}°`);
-    }
-  }, [apply, document.id, selected, showStatus]);
-  const move = useCallback((dx: number, dy: number) => { if (selected) apply({ type: "move-element", documentId: document.id, elementId: selected.id, dx, dy }); }, [apply, document.id, selected]);
+    const snapped = frameImageToLabel(selected, document.size);
+    const currentlySnapped = selected.x === snapped.x
+      && selected.y === snapped.y
+      && selected.width === snapped.width
+      && selected.height === snapped.height;
+    const rotated = { ...selected, rotation };
+    const geometry = currentlySnapped
+      ? frameImageToLabel(rotated, document.size)
+      : constrainImageGeometry(rotated, rotation, document.size);
+    if (!apply({ type: "update-image", documentId: document.id, elementId: selected.id, rotation })) return;
+    if (!apply({ type: "resize-element", documentId: document.id, elementId: selected.id, ...geometry })) return;
+    showStatus(`Rotated to ${rotation}°`);
+  }, [apply, document.id, document.size, selected, showStatus]);
   const removeSelected = useCallback(() => {
     if (!selected) return;
     if (apply({ type: "remove-element", documentId: document.id, elementId: selected.id })) { setSelectedId(null); showStatus("Element deleted"); }
@@ -214,9 +225,18 @@ const App: React.FC = () => {
       return withElementGeometry(document, resize.element.id, resizePreview);
     }
     if (drag && (dragOffset.x || dragOffset.y)) {
+      const element = document.elements.find((candidate) => candidate.id === drag.elementId);
+      const geometry = element?.type === "image"
+        ? constrainImageGeometry({
+          x: drag.originX + dragOffset.x,
+          y: drag.originY + dragOffset.y,
+          width: element.width,
+          height: element.height,
+        }, element.rotation ?? 0, document.size)
+        : { x: drag.originX + dragOffset.x, y: drag.originY + dragOffset.y };
       return withElementGeometry(document, drag.elementId, {
-        x: drag.originX + dragOffset.x,
-        y: drag.originY + dragOffset.y,
+        x: geometry.x,
+        y: geometry.y,
       });
     }
     return document;
@@ -249,7 +269,18 @@ const App: React.FC = () => {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     const offset = { x: Math.round(dragOffset.x), y: Math.round(dragOffset.y) };
     setDrag(null); setDragOffset({ x: 0, y: 0 });
-    if (offset.x || offset.y) apply({ type: "move-element", documentId: document.id, elementId: drag.elementId, x: drag.originX + offset.x, y: drag.originY + offset.y });
+    if (offset.x || offset.y) {
+      const element = document.elements.find((candidate) => candidate.id === drag.elementId);
+      const position = element?.type === "image"
+        ? constrainImageGeometry({
+          x: drag.originX + offset.x,
+          y: drag.originY + offset.y,
+          width: element.width,
+          height: element.height,
+        }, element.rotation ?? 0, document.size)
+        : { x: drag.originX + offset.x, y: drag.originY + offset.y };
+      apply({ type: "move-element", documentId: document.id, elementId: drag.elementId, x: position.x, y: position.y });
+    }
   }, [apply, document.id, drag, dragOffset]);
   const onPointerCancel = useCallback(() => {
     setDrag(null);
@@ -275,13 +306,13 @@ const App: React.FC = () => {
   const onResizePointerMove = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
     if (!resize || event.pointerId !== resize.pointerId) return;
     const point = pointOnDocument(event.clientX, event.clientY);
-    if (point) setResizePreview(resizeImageFromCorner(resize.element, resize.corner, point));
-  }, [pointOnDocument, resize]);
+    if (point) setResizePreview(resizeImageFromCorner(resize.element, resize.corner, point, document.size));
+  }, [document.size, pointOnDocument, resize]);
   const finishResize = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
     if (!resize || event.pointerId !== resize.pointerId) return;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     const point = pointOnDocument(event.clientX, event.clientY);
-    const geometry = point ? resizeImageFromCorner(resize.element, resize.corner, point) : resizePreview;
+    const geometry = point ? resizeImageFromCorner(resize.element, resize.corner, point, document.size) : resizePreview;
     setResize(null);
     setResizePreview(null);
     if (geometry) {
@@ -292,7 +323,7 @@ const App: React.FC = () => {
         ...geometry,
       });
     }
-  }, [apply, document.id, pointOnDocument, resize, resizePreview]);
+  }, [apply, document.id, document.size, pointOnDocument, resize, resizePreview]);
   const cancelResize = useCallback(() => {
     setResize(null);
     setResizePreview(null);
@@ -320,11 +351,11 @@ const App: React.FC = () => {
         <div className="document-name-control"><input aria-label="Label name" value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} onBlur={rename} onKeyDown={(event) => { if (event.key === "Enter") rename(); }} /></div>
         <div className="header-actions">{status && <span className="status-message" role="status">{status}</span>}<button className="button button-primary" type="button" onClick={() => { void printOnce(); }} disabled={isPrinting}>{isPrinting ? "Preparing…" : "Print once"}</button><button className="button button-quiet" type="button" onClick={copySelected} disabled={!selected}>Copy</button><button className="button button-quiet" type="button" onClick={pasteSelected} disabled={!copiedId && !selectedId}>Paste</button><button className="button button-danger" type="button" onClick={removeSelected} disabled={!selected}>Delete</button></div>
       </header>
-      <div className="editor-toolbar"><div className="toolbar-group"><button className="button button-primary" type="button" onClick={addText}>Add Text</button><button className="button" type="button" onClick={() => fileInputRef.current?.click()}>Add Image or PDF</button><input ref={fileInputRef} type="file" accept="image/*,application/pdf,.pdf" multiple hidden onChange={(event) => { void addFiles(Array.from(event.target.files ?? [])); event.currentTarget.value = ""; }} /></div><div className="toolbar-group toolbar-group-right"><button className="button button-quiet" type="button" onClick={() => move(0, -10)} disabled={!selected}>Up</button><button className="button button-quiet" type="button" onClick={() => move(0, 10)} disabled={!selected}>Down</button><button className="button button-quiet" type="button" onClick={() => move(-10, 0)} disabled={!selected}>Left</button><button className="button button-quiet" type="button" onClick={() => move(10, 0)} disabled={!selected}>Right</button><button className="button button-quiet" type="button" onClick={() => duplicate(selectedId)} disabled={!selected}>Duplicate</button></div></div>
+      <div className="editor-toolbar"><div className="toolbar-group"><button className="button button-primary" type="button" onClick={addText}>Add Text</button><button className="button" type="button" onClick={() => fileInputRef.current?.click()}>Add Image or PDF</button><input ref={fileInputRef} type="file" accept="image/*,application/pdf,.pdf" multiple hidden onChange={(event) => { void addFiles(Array.from(event.target.files ?? [])); event.currentTarget.value = ""; }} /></div><div className="toolbar-group toolbar-group-right">{selected?.type === "image" && <><button className="button" type="button" onClick={() => frameImage("contain")}>Fit whole image</button><button className="button" type="button" onClick={() => frameImage("cover")}>Fill label</button><button className="button button-quiet" type="button" onClick={() => rotateImage(-1)}>Rotate left</button><button className="button button-quiet" type="button" onClick={() => rotateImage(1)}>Rotate right</button></>}<button className="button button-quiet" type="button" onClick={() => duplicate(selectedId)} disabled={!selected}>Duplicate</button></div></div>
       <section className="editor-layout">
         <aside className="layers-panel"><div className="panel-heading"><h2>Layers</h2><span>{elements.length}</span></div><div className="layer-list">{elements.map((element, index) => <button className={`layer-row ${selectedId === element.id ? "selected" : ""}`} type="button" key={element.id} onClick={() => setSelectedId(element.id)}><span className="layer-number">{String(index + 1).padStart(2, "0")}</span><span className="layer-label">{element.type === "text" ? element.text || "Empty text" : "Image"}</span><span className="layer-kind">{element.type}</span></button>)}</div>{elements.length === 0 && <p className="empty-copy">Add text or an image to get started.</p>}</aside>
         <section className="canvas-column"><div className="canvas-heading"><h2>{document.name}</h2><span className="canvas-size">{width} × {height}</span></div><div className={`canvas-stage ${isDropTarget ? "drop-target" : ""}`} onDragEnter={(event) => { event.preventDefault(); setIsDropTarget(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setIsDropTarget(false)} onDrop={handleDrop}>{isDropTarget && <div className="drop-overlay">Drop image or PDF</div>}<div ref={paperRef} className="paper-frame" style={{ aspectRatio: `${width} / ${height}` }} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}><div className="paper-svg" dangerouslySetInnerHTML={{ __html: previewArtifact.source }} />{imageSelection && <div className="image-selection" style={selectionStyle} aria-label="Selected image frame">{RESIZE_CORNERS.map(({ corner, name, className }) => <button key={name} className={`resize-handle ${className}`} type="button" aria-label={`Resize from ${name} corner`} onPointerDown={(event) => onResizePointerDown(event, corner)} onPointerMove={onResizePointerMove} onPointerUp={finishResize} onPointerCancel={cancelResize} />)}</div>}</div></div></section>
-        <aside className="properties-panel"><div className="panel-heading"><h2>Properties</h2></div>{selected ? <div className="properties-content"><p className="selected-kind">{selected.type === "text" ? "Text" : selected.type === "image" ? "Image" : "Rectangle"}</p>{selected.type === "text" ? <><label className="field-label" htmlFor="selected-text">Text</label><textarea id="selected-text" value={textDraft} onChange={(event) => setTextDraft(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") editText(); }} /><button className="button button-primary full-width" type="button" onClick={editText}>Update text</button></> : selected.type === "image" ? <><p className="empty-copy">Drag to move. Drag a corner handle to scale the image.</p><div className="image-controls"><span className="field-label">Image in frame</span><div className="property-button-row"><button className={`button ${selected.fit !== "cover" ? "button-primary" : ""}`} type="button" onClick={() => setImageFit("contain")}>Fit whole image</button><button className={`button ${selected.fit === "cover" ? "button-primary" : ""}`} type="button" onClick={() => setImageFit("cover")}>Fill frame (crop)</button></div><p className="control-help">Fit whole image keeps every edge visible and may leave empty space. Fill frame crops overflow from the center.</p><span className="field-label">Orientation</span><div className="property-button-row"><button className="button" type="button" onClick={() => rotateImage(-1)}>Rotate left</button><button className="button" type="button" onClick={() => rotateImage(1)}>Rotate right</button></div><p className="image-setting-summary">{selected.fit === "cover" ? "Centered crop" : "Whole image"} · {selected.rotation ?? 0}°</p></div></> : <p className="empty-copy">Drag the rectangle on the canvas to reposition it.</p>}<div className="property-position"><span>Position</span><strong>{Math.round(selected.x)}, {Math.round(selected.y)}</strong></div></div> : <p className="empty-copy">Select a layer to edit its properties.</p>}</aside>
+        <aside className="properties-panel"><div className="panel-heading"><h2>Properties</h2></div>{selected ? <div className="properties-content"><p className="selected-kind">{selected.type === "text" ? "Text" : selected.type === "image" ? "Image" : "Rectangle"}</p>{selected.type === "text" ? <><label className="field-label" htmlFor="selected-text">Text</label><textarea id="selected-text" value={textDraft} onChange={(event) => setTextDraft(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") editText(); }} /><button className="button button-primary full-width" type="button" onClick={editText}>Update text</button></> : selected.type === "image" ? <><p className="empty-copy">Drag to move. Drag a corner handle to scale. The selected frame stays inside the printable label.</p><div className="image-controls"><span className="field-label">Current framing</span><p className="image-setting-summary">{selected.fit === "cover" ? "Fills label with centered crop" : "Shows the whole image"} · {selected.rotation ?? 0}°</p><p className="control-help">Use the framing and rotate buttons above the label.</p></div></> : <p className="empty-copy">Drag the rectangle on the canvas to reposition it.</p>}<div className="property-position"><span>Position</span><strong>{Math.round(selected.x)}, {Math.round(selected.y)}</strong></div></div> : <p className="empty-copy">Select a layer to edit its properties.</p>}</aside>
       </section>
     </main>
   );

@@ -21,6 +21,11 @@ export interface ResizeCorner {
   y: -1 | 1;
 }
 
+export interface Size {
+  width: number;
+  height: number;
+}
+
 export const initialDocument: LabelDocument = {
   schemaVersion: 1,
   id: "doc-current-label",
@@ -46,10 +51,61 @@ const rotate = (point: Point, radians: number): Point => ({
   y: point.x * Math.sin(radians) + point.y * Math.cos(radians),
 });
 
+const clamp = (value: number, minimum: number, maximum: number): number => (
+  Math.min(Math.max(value, minimum), maximum)
+);
+
+export const frameImageToLabel = (
+  image: LabelImageElement,
+  label: Size,
+): ElementGeometry => {
+  const quarterTurn = (image.rotation ?? 0) % 180 !== 0;
+  const width = quarterTurn ? label.height : label.width;
+  const height = quarterTurn ? label.width : label.height;
+  return {
+    x: Math.round((label.width - width) / 2),
+    y: Math.round((label.height - height) / 2),
+    width,
+    height,
+  };
+};
+
+export const constrainImageGeometry = (
+  geometry: ElementGeometry,
+  rotation: number,
+  label: Size,
+): ElementGeometry => {
+  const quarterTurn = rotation % 180 !== 0;
+  const visualWidth = quarterTurn ? geometry.height : geometry.width;
+  const visualHeight = quarterTurn ? geometry.width : geometry.height;
+  const scale = Math.min(1, label.width / visualWidth, label.height / visualHeight);
+  const width = Math.round(geometry.width * scale);
+  const height = Math.round(geometry.height * scale);
+  const constrainedVisualWidth = quarterTurn ? height : width;
+  const constrainedVisualHeight = quarterTurn ? width : height;
+  const centerX = clamp(
+    geometry.x + geometry.width / 2,
+    constrainedVisualWidth / 2,
+    label.width - constrainedVisualWidth / 2,
+  );
+  const centerY = clamp(
+    geometry.y + geometry.height / 2,
+    constrainedVisualHeight / 2,
+    label.height - constrainedVisualHeight / 2,
+  );
+  return {
+    x: Math.round(centerX - width / 2),
+    y: Math.round(centerY - height / 2),
+    width,
+    height,
+  };
+};
+
 export const resizeImageFromCorner = (
   image: LabelImageElement,
   corner: ResizeCorner,
   pointer: Point,
+  label?: Size,
 ): ElementGeometry => {
   const radians = ((image.rotation ?? 0) * Math.PI) / 180;
   const center = {
@@ -88,10 +144,13 @@ export const resizeImageFromCorner = (
     y: opposite.y + nextCenterFromOpposite.y,
   };
 
-  return {
+  const geometry = {
     x: Math.round(nextCenter.x - width / 2),
     y: Math.round(nextCenter.y - height / 2),
     width,
     height,
   };
+  return label
+    ? constrainImageGeometry(geometry, image.rotation ?? 0, label)
+    : geometry;
 };
