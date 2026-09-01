@@ -133,6 +133,37 @@ describe("LabelWorkspace", () => {
     } as never)).toThrow(/must be 0, 90, 180, or 270/);
   });
 
+  it("resizes and repositions an element in one command", () => {
+    const workspace = createLabelWorkspace();
+    workspace.execute({ type: "create-document", documentId: "label", name: "Label", size: { width: 800, height: 1200 } });
+    workspace.execute({
+      type: "add-image",
+      documentId: "label",
+      element: { id: "photo", x: 100, y: 200, width: 200, height: 100, source: "data:image/png;base64,AAAA" },
+    });
+
+    const change = workspace.execute({
+      type: "resize-element",
+      documentId: "label",
+      elementId: "photo",
+      x: 25,
+      y: 225,
+      width: 300,
+      height: 150,
+    });
+
+    expect(change.document.elements[0]).toMatchObject({ x: 25, y: 225, width: 300, height: 150 });
+    expect(() => workspace.execute({
+      type: "resize-element",
+      documentId: "label",
+      elementId: "photo",
+      x: 25,
+      y: 225,
+      width: 0,
+      height: 150,
+    } as never)).toThrow(/width must be positive/);
+  });
+
   it("rejects non-raster image sources", () => {
     const workspace = createLabelWorkspace();
     workspace.execute({ type: "create-document", documentId: "label", name: "Label", size: { width: 100, height: 100 } });

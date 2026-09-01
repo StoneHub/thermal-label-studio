@@ -1,49 +1,58 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createLabelWorkspace,
+  renderLabelDocument,
   type LabelDocument,
+  type LabelImageElement,
   type RenderArtifact,
   type WorkspaceCommand,
 } from "@tls/core";
 import { fitArtworkWithin, importArtwork } from "./lib/artworkImport";
+import {
+  initialDocument,
+  resizeImageFromCorner,
+  withElementGeometry,
+  type ElementGeometry,
+  type ResizeCorner,
+} from "./lib/editorModel";
 import { prepareLabelPrintIntent, submitLabelPrintIntent } from "./lib/printIntent";
 
 type Workspace = ReturnType<typeof createLabelWorkspace>;
 type DragState = { elementId: string; startX: number; startY: number; originX: number; originY: number };
-
-const sampleDocument: LabelDocument = {
-  schemaVersion: 1,
-  id: "doc-pantry-bin",
-  name: "Pantry bin label",
-  revision: 1,
-  size: { width: 800, height: 1200 },
-  elements: [
-    { id: "sample-heading", type: "text", text: "PANTRY", x: 88, y: 96, width: 624, height: 104, fontSize: 72, fontFamily: "Arial, sans-serif", fontWeight: 800, fill: "#17212b" },
-    { id: "sample-subheading", type: "text", text: "BAKING SUPPLIES", x: 88, y: 244, width: 624, height: 58, fontSize: 30, fontFamily: "Arial, sans-serif", fontWeight: 700, fill: "#c75b35" },
-  ],
+type ResizeState = {
+  element: LabelImageElement;
+  corner: ResizeCorner;
+  pointerId: number;
 };
+const RESIZE_CORNERS: Array<{ corner: ResizeCorner; name: string; className: string }> = [
+  { corner: { x: -1, y: -1 }, name: "top left", className: "top-left" },
+  { corner: { x: 1, y: -1 }, name: "top right", className: "top-right" },
+  { corner: { x: -1, y: 1 }, name: "bottom left", className: "bottom-left" },
+  { corner: { x: 1, y: 1 }, name: "bottom right", className: "bottom-right" },
+];
 
 const App: React.FC = () => {
   const workspace = useMemo(() => {
     const next = createLabelWorkspace();
-    next.execute({ type: "create-document", document: sampleDocument });
+    next.execute({ type: "create-document", document: initialDocument });
     return next;
   }, []);
-  const [document, setDocument] = useState<LabelDocument>(() => workspace.getDocument(sampleDocument.id) ?? sampleDocument);
-  const [artifact, setArtifact] = useState<RenderArtifact>(() => workspace.render(sampleDocument.id));
-  const [selectedId, setSelectedId] = useState<string | null>("sample-heading");
+  const [document, setDocument] = useState<LabelDocument>(() => workspace.getDocument(initialDocument.id) ?? initialDocument);
+  const [artifact, setArtifact] = useState<RenderArtifact>(() => workspace.render(initialDocument.id));
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [nameDraft, setNameDraft] = useState(document.name);
-  const [textDraft, setTextDraft] = useState("PANTRY");
+  const [textDraft, setTextDraft] = useState("");
   const [status, setStatus] = useState("");
   const [isDropTarget, setIsDropTarget] = useState(false);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [resize, setResize] = useState<ResizeState | null>(null);
+  const [resizePreview, setResizePreview] = useState<ElementGeometry | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const paperRef = useRef<HTMLDivElement>(null);
   const statusTimer = useRef<number | undefined>(undefined);
-  const savedTransform = useRef<string | null>(null);
 
   const showStatus = useCallback((message: string) => {
     setStatus(message);
@@ -200,14 +209,23 @@ const App: React.FC = () => {
     return () => window.removeEventListener("paste", onPaste);
   }, [addFiles, copiedId, pasteSelected, selectedId]);
 
-  useEffect(() => {
-    const node = drag && paperRef.current?.querySelector(`[data-element-id="${drag.elementId}"]`);
-    if (!node) return;
-    if (savedTransform.current === null) savedTransform.current = node.getAttribute("transform");
-    if (dragOffset.x || dragOffset.y) node.setAttribute("transform", `translate(${dragOffset.x} ${dragOffset.y})`);
-    else if (savedTransform.current) node.setAttribute("transform", savedTransform.current);
-    return () => { if (savedTransform.current === null) node.removeAttribute("transform"); else node.setAttribute("transform", savedTransform.current); };
-  }, [drag, dragOffset]);
+  const previewDocument = useMemo(() => {
+    if (resize && resizePreview) {
+      return withElementGeometry(document, resize.element.id, resizePreview);
+    }
+    if (drag && (dragOffset.x || dragOffset.y)) {
+      return withElementGeometry(document, drag.elementId, {
+        x: drag.originX + dragOffset.x,
+        y: drag.originY + dragOffset.y,
+      });
+    }
+    return document;
+  }, [document, drag, dragOffset, resize, resizePreview]);
+  const previewArtifact = useMemo(
+    () => previewDocument === document ? artifact : renderLabelDocument(previewDocument),
+    [artifact, document, previewDocument],
+  );
+  const previewSelected = previewDocument.elements.find((element) => element.id === selectedId);
 
   const onPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
@@ -220,7 +238,6 @@ const App: React.FC = () => {
     setSelectedId(element.id);
     setDrag({ elementId: element.id, startX: event.clientX, startY: event.clientY, originX: element.x, originY: element.y });
     setDragOffset({ x: 0, y: 0 });
-    savedTransform.current = null;
   }, [document.elements]);
   const onPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (!drag || !paperRef.current) return;
@@ -231,13 +248,54 @@ const App: React.FC = () => {
     if (!drag) return;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     const offset = { x: Math.round(dragOffset.x), y: Math.round(dragOffset.y) };
-    setDrag(null); setDragOffset({ x: 0, y: 0 }); savedTransform.current = null;
+    setDrag(null); setDragOffset({ x: 0, y: 0 });
     if (offset.x || offset.y) apply({ type: "move-element", documentId: document.id, elementId: drag.elementId, x: drag.originX + offset.x, y: drag.originY + offset.y });
   }, [apply, document.id, drag, dragOffset]);
   const onPointerCancel = useCallback(() => {
     setDrag(null);
     setDragOffset({ x: 0, y: 0 });
-    savedTransform.current = null;
+  }, []);
+
+  const pointOnDocument = useCallback((clientX: number, clientY: number) => {
+    const rect = paperRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    return {
+      x: (clientX - rect.left) * document.size.width / rect.width,
+      y: (clientY - rect.top) * document.size.height / rect.height,
+    };
+  }, [document.size.height, document.size.width]);
+  const onResizePointerDown = useCallback((event: React.PointerEvent<HTMLButtonElement>, corner: ResizeCorner) => {
+    if (!selected || selected.type !== "image") return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setResize({ element: selected, corner, pointerId: event.pointerId });
+    setResizePreview({ x: selected.x, y: selected.y, width: selected.width, height: selected.height });
+  }, [selected]);
+  const onResizePointerMove = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!resize || event.pointerId !== resize.pointerId) return;
+    const point = pointOnDocument(event.clientX, event.clientY);
+    if (point) setResizePreview(resizeImageFromCorner(resize.element, resize.corner, point));
+  }, [pointOnDocument, resize]);
+  const finishResize = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!resize || event.pointerId !== resize.pointerId) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    const point = pointOnDocument(event.clientX, event.clientY);
+    const geometry = point ? resizeImageFromCorner(resize.element, resize.corner, point) : resizePreview;
+    setResize(null);
+    setResizePreview(null);
+    if (geometry) {
+      apply({
+        type: "resize-element",
+        documentId: document.id,
+        elementId: resize.element.id,
+        ...geometry,
+      });
+    }
+  }, [apply, document.id, pointOnDocument, resize, resizePreview]);
+  const cancelResize = useCallback(() => {
+    setResize(null);
+    setResizePreview(null);
   }, []);
   const handleDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -247,6 +305,14 @@ const App: React.FC = () => {
 
   const width = artifact.width;
   const height = artifact.height;
+  const imageSelection = previewSelected?.type === "image" ? previewSelected : null;
+  const selectionStyle: React.CSSProperties | undefined = imageSelection ? {
+    left: `${imageSelection.x / document.size.width * 100}%`,
+    top: `${imageSelection.y / document.size.height * 100}%`,
+    width: `${imageSelection.width / document.size.width * 100}%`,
+    height: `${imageSelection.height / document.size.height * 100}%`,
+    transform: `rotate(${imageSelection.rotation ?? 0}deg)`,
+  } : undefined;
   return (
     <main className="editor-shell">
       <header className="editor-header">
@@ -257,8 +323,8 @@ const App: React.FC = () => {
       <div className="editor-toolbar"><div className="toolbar-group"><button className="button button-primary" type="button" onClick={addText}>Add Text</button><button className="button" type="button" onClick={() => fileInputRef.current?.click()}>Add Image or PDF</button><input ref={fileInputRef} type="file" accept="image/*,application/pdf,.pdf" multiple hidden onChange={(event) => { void addFiles(Array.from(event.target.files ?? [])); event.currentTarget.value = ""; }} /></div><div className="toolbar-group toolbar-group-right"><button className="button button-quiet" type="button" onClick={() => move(0, -10)} disabled={!selected}>Up</button><button className="button button-quiet" type="button" onClick={() => move(0, 10)} disabled={!selected}>Down</button><button className="button button-quiet" type="button" onClick={() => move(-10, 0)} disabled={!selected}>Left</button><button className="button button-quiet" type="button" onClick={() => move(10, 0)} disabled={!selected}>Right</button><button className="button button-quiet" type="button" onClick={() => duplicate(selectedId)} disabled={!selected}>Duplicate</button></div></div>
       <section className="editor-layout">
         <aside className="layers-panel"><div className="panel-heading"><h2>Layers</h2><span>{elements.length}</span></div><div className="layer-list">{elements.map((element, index) => <button className={`layer-row ${selectedId === element.id ? "selected" : ""}`} type="button" key={element.id} onClick={() => setSelectedId(element.id)}><span className="layer-number">{String(index + 1).padStart(2, "0")}</span><span className="layer-label">{element.type === "text" ? element.text || "Empty text" : "Image"}</span><span className="layer-kind">{element.type}</span></button>)}</div>{elements.length === 0 && <p className="empty-copy">Add text or an image to get started.</p>}</aside>
-        <section className="canvas-column"><div className="canvas-heading"><h2>{document.name}</h2><span className="canvas-size">{width} × {height}</span></div><div className={`canvas-stage ${isDropTarget ? "drop-target" : ""}`} onDragEnter={(event) => { event.preventDefault(); setIsDropTarget(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setIsDropTarget(false)} onDrop={handleDrop}>{isDropTarget && <div className="drop-overlay">Drop image or PDF</div>}<div ref={paperRef} className="paper-frame" style={{ aspectRatio: `${width} / ${height}` }} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}><div className="paper-svg" dangerouslySetInnerHTML={{ __html: artifact.source }} /></div></div></section>
-        <aside className="properties-panel"><div className="panel-heading"><h2>Properties</h2></div>{selected ? <div className="properties-content"><p className="selected-kind">{selected.type === "text" ? "Text" : selected.type === "image" ? "Image" : "Rectangle"}</p>{selected.type === "text" ? <><label className="field-label" htmlFor="selected-text">Text</label><textarea id="selected-text" value={textDraft} onChange={(event) => setTextDraft(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") editText(); }} /><button className="button button-primary full-width" type="button" onClick={editText}>Update text</button></> : selected.type === "image" ? <><p className="empty-copy">Drag the image on the canvas to reposition it.</p><div className="image-controls"><span className="field-label">Crop</span><div className="property-button-row"><button className={`button ${selected.fit !== "cover" ? "button-primary" : ""}`} type="button" onClick={() => setImageFit("contain")}>Whole image</button><button className={`button ${selected.fit === "cover" ? "button-primary" : ""}`} type="button" onClick={() => setImageFit("cover")}>Fill and crop</button></div><span className="field-label">Orientation</span><div className="property-button-row"><button className="button" type="button" onClick={() => rotateImage(-1)}>Rotate left</button><button className="button" type="button" onClick={() => rotateImage(1)}>Rotate right</button></div><p className="image-setting-summary">{selected.fit === "cover" ? "Centered crop" : "No crop"} · {selected.rotation ?? 0}°</p></div></> : <p className="empty-copy">Drag the rectangle on the canvas to reposition it.</p>}<div className="property-position"><span>Position</span><strong>{Math.round(selected.x)}, {Math.round(selected.y)}</strong></div></div> : <p className="empty-copy">Select a layer to edit its properties.</p>}</aside>
+        <section className="canvas-column"><div className="canvas-heading"><h2>{document.name}</h2><span className="canvas-size">{width} × {height}</span></div><div className={`canvas-stage ${isDropTarget ? "drop-target" : ""}`} onDragEnter={(event) => { event.preventDefault(); setIsDropTarget(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setIsDropTarget(false)} onDrop={handleDrop}>{isDropTarget && <div className="drop-overlay">Drop image or PDF</div>}<div ref={paperRef} className="paper-frame" style={{ aspectRatio: `${width} / ${height}` }} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}><div className="paper-svg" dangerouslySetInnerHTML={{ __html: previewArtifact.source }} />{imageSelection && <div className="image-selection" style={selectionStyle} aria-label="Selected image frame">{RESIZE_CORNERS.map(({ corner, name, className }) => <button key={name} className={`resize-handle ${className}`} type="button" aria-label={`Resize from ${name} corner`} onPointerDown={(event) => onResizePointerDown(event, corner)} onPointerMove={onResizePointerMove} onPointerUp={finishResize} onPointerCancel={cancelResize} />)}</div>}</div></div></section>
+        <aside className="properties-panel"><div className="panel-heading"><h2>Properties</h2></div>{selected ? <div className="properties-content"><p className="selected-kind">{selected.type === "text" ? "Text" : selected.type === "image" ? "Image" : "Rectangle"}</p>{selected.type === "text" ? <><label className="field-label" htmlFor="selected-text">Text</label><textarea id="selected-text" value={textDraft} onChange={(event) => setTextDraft(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") editText(); }} /><button className="button button-primary full-width" type="button" onClick={editText}>Update text</button></> : selected.type === "image" ? <><p className="empty-copy">Drag to move. Drag a corner handle to scale the image.</p><div className="image-controls"><span className="field-label">Image in frame</span><div className="property-button-row"><button className={`button ${selected.fit !== "cover" ? "button-primary" : ""}`} type="button" onClick={() => setImageFit("contain")}>Fit whole image</button><button className={`button ${selected.fit === "cover" ? "button-primary" : ""}`} type="button" onClick={() => setImageFit("cover")}>Fill frame (crop)</button></div><p className="control-help">Fit whole image keeps every edge visible and may leave empty space. Fill frame crops overflow from the center.</p><span className="field-label">Orientation</span><div className="property-button-row"><button className="button" type="button" onClick={() => rotateImage(-1)}>Rotate left</button><button className="button" type="button" onClick={() => rotateImage(1)}>Rotate right</button></div><p className="image-setting-summary">{selected.fit === "cover" ? "Centered crop" : "Whole image"} · {selected.rotation ?? 0}°</p></div></> : <p className="empty-copy">Drag the rectangle on the canvas to reposition it.</p>}<div className="property-position"><span>Position</span><strong>{Math.round(selected.x)}, {Math.round(selected.y)}</strong></div></div> : <p className="empty-copy">Select a layer to edit its properties.</p>}</aside>
       </section>
     </main>
   );

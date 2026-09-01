@@ -119,6 +119,16 @@ export interface MoveElementCommand {
   readonly dy?: number;
 }
 
+export interface ResizeElementCommand {
+  readonly type: "resize-element";
+  readonly documentId: string;
+  readonly elementId: string;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
 export interface RemoveElementCommand {
   readonly type: "remove-element";
   readonly documentId: string;
@@ -179,6 +189,7 @@ export type WorkspaceCommand =
   | AddTextCommand
   | UpdateTextCommand
   | MoveElementCommand
+  | ResizeElementCommand
   | RemoveElementCommand
   | AddRectangleCommand
   | AddImageCommand
@@ -559,6 +570,20 @@ export function createLabelWorkspace(initialDocuments: readonly NewLabelDocument
           const y = hasAbsolute ? command.y! : candidate.y + command.dy!;
           return validateElement({ ...candidate, x, y }, previous.elements.indexOf(candidate));
         });
+        return replace(updatedDocument(previous, nextElements), previous, command);
+      }
+      case "resize-element": {
+        const previous = getKnownDocument(command.documentId);
+        findElement(previous, command.elementId);
+        const nextElements = previous.elements.map((candidate, index) => candidate.id === command.elementId
+          ? validateElement({
+              ...candidate,
+              x: command.x,
+              y: command.y,
+              width: command.width,
+              height: command.height,
+            }, index)
+          : candidate);
         return replace(updatedDocument(previous, nextElements), previous, command);
       }
       case "remove-element": {

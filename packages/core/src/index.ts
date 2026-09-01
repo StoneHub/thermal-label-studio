@@ -402,6 +402,7 @@ export type {
   MoveElementCommand,
   NewLabelDocument,
   RemoveElementCommand,
+  ResizeElementCommand,
   RenameDocumentCommand,
   UpdateTextCommand,
   UpdateImageCommand,

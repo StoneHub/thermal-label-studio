@@ -1,7 +1,7 @@
 import type { RenderArtifact } from "@tls/core";
 
 export const LABEL_PRINTER_PROFILE = Object.freeze({
-  id: "offnova-n6140-4x6",
+  id: "phomemo-pm241bt-4x6",
   width: 800,
   height: 1200,
 });
@@ -34,7 +34,7 @@ export interface PackedMonochromeBitmap {
   readonly blackPixelCount: number;
 }
 
-/** Pack RGBA pixels as a binary PBM. A set bit means the thermal head prints black. */
+/** Pack RGBA pixels as a conventional binary PBM. A set bit means black. */
 export function packMonochromePbm(
   rgba: Uint8ClampedArray,
   width: number,
@@ -112,7 +112,7 @@ async function rasterize(artifact: RenderArtifact): Promise<Uint8ClampedArray> {
 
 export async function prepareLabelPrintIntent(artifact: RenderArtifact): Promise<LabelPrintIntent> {
   if (artifact.width !== LABEL_PRINTER_PROFILE.width || artifact.height !== LABEL_PRINTER_PROFILE.height) {
-    throw new Error(`The OFFNOVA profile requires ${LABEL_PRINTER_PROFILE.width} × ${LABEL_PRINTER_PROFILE.height}.`);
+    throw new Error(`The Phomemo PM-241BT profile requires ${LABEL_PRINTER_PROFILE.width} × ${LABEL_PRINTER_PROFILE.height}.`);
   }
   const packed = packMonochromePbm(await rasterize(artifact), artifact.width, artifact.height);
   if (packed.blackPixelCount === 0) throw new Error("The prepared label has no black pixels.");
