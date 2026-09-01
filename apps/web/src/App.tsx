@@ -9,6 +9,12 @@ import {
 } from "@tls/core";
 import { fitArtworkWithin, importArtwork } from "./lib/artworkImport";
 import {
+  listArtworkHistory,
+  loadArtworkSource,
+  saveArtworkSource,
+  type ArtworkHistoryItem,
+} from "./lib/artworkHistory";
+import {
   constrainImageGeometry,
   frameImageToLabel,
   initialDocument,
@@ -52,7 +58,10 @@ const App: React.FC = () => {
   const [resizePreview, setResizePreview] = useState<ElementGeometry | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [artworkHistory, setArtworkHistory] = useState<ArtworkHistoryItem[]>([]);
+  const [historyLoadingId, setHistoryLoadingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const historyRef = useRef<HTMLDivElement>(null);
   const paperRef = useRef<HTMLDivElement>(null);
   const statusTimer = useRef<number | undefined>(undefined);
 
@@ -62,6 +71,13 @@ const App: React.FC = () => {
     statusTimer.current = window.setTimeout(() => setStatus(""), 3000);
   }, []);
   useEffect(() => () => { if (statusTimer.current !== undefined) window.clearTimeout(statusTimer.current); }, []);
+  useEffect(() => {
+    let active = true;
+    void listArtworkHistory()
+      .then((items) => { if (active) setArtworkHistory(items); })
+      .catch(() => { if (active) showStatus("Upload history is unavailable."); });
+    return () => { active = false; };
+  }, [showStatus]);
 
   const elements = document.elements;
   const selected = elements.find((element) => element.id === selectedId);
@@ -97,7 +113,7 @@ const App: React.FC = () => {
     }
   }, [apply, document.id, showStatus]);
 
-  const addArtwork = useCallback(async (file: File) => {
+  const addArtwork = useCallback(async (file: File, saveOriginal = true): Promise<boolean> => {
     try {
       const imported = await importArtwork(file);
       const fit = fitArtworkWithin(imported, document.size, 48);
@@ -117,12 +133,40 @@ const App: React.FC = () => {
         },
       })) {
         setSelectedId(id);
-        showStatus(`${imported.name} added`);
+        if (saveOriginal) {
+          try {
+            const historyItem = await saveArtworkSource(file);
+            setArtworkHistory((items) => [historyItem, ...items.filter((item) => item.id !== historyItem.id)]);
+          } catch (error) {
+            showStatus(error instanceof Error ? `${imported.name} added; ${error.message}` : `${imported.name} added; original not saved.`);
+            return true;
+          }
+        }
+        showStatus(saveOriginal ? `${imported.name} added and saved` : `${imported.name} added from history`);
+        return true;
       }
     } catch (error) {
       showStatus(error instanceof Error ? error.message : "That file could not be added.");
     }
+    return false;
   }, [apply, document.id, document.size.height, document.size.width, showStatus]);
+
+  const addFromHistory = useCallback(async (item: ArtworkHistoryItem) => {
+    if (historyLoadingId) return;
+    setHistoryLoadingId(item.id);
+    try {
+      const file = await loadArtworkSource(item);
+      await addArtwork(file, false);
+    } catch (error) {
+      showStatus(error instanceof Error ? error.message : "That original upload could not be loaded.");
+    } finally {
+      setHistoryLoadingId(null);
+    }
+  }, [addArtwork, historyLoadingId, showStatus]);
+
+  const scrollHistory = useCallback((direction: -1 | 1) => {
+    historyRef.current?.scrollBy({ left: direction * 420, behavior: "smooth" });
+  }, []);
 
   const addFiles = useCallback(async (files: readonly File[]) => {
     for (const file of files) await addArtwork(file);
@@ -352,6 +396,13 @@ const App: React.FC = () => {
         <div className="header-actions">{status && <span className="status-message" role="status">{status}</span>}<button className="button button-primary" type="button" onClick={() => { void printOnce(); }} disabled={isPrinting}>{isPrinting ? "Preparing…" : "Print once"}</button><button className="button button-quiet" type="button" onClick={copySelected} disabled={!selected}>Copy</button><button className="button button-quiet" type="button" onClick={pasteSelected} disabled={!copiedId && !selectedId}>Paste</button><button className="button button-danger" type="button" onClick={removeSelected} disabled={!selected}>Delete</button></div>
       </header>
       <div className="editor-toolbar"><div className="toolbar-group"><button className="button button-primary" type="button" onClick={addText}>Add Text</button><button className="button" type="button" onClick={() => fileInputRef.current?.click()}>Add Image or PDF</button><input ref={fileInputRef} type="file" accept="image/*,application/pdf,.pdf" multiple hidden onChange={(event) => { void addFiles(Array.from(event.target.files ?? [])); event.currentTarget.value = ""; }} /></div><div className="toolbar-group toolbar-group-right">{selected?.type === "image" && <><button className="button" type="button" onClick={() => frameImage("contain")}>Fit whole image</button><button className="button" type="button" onClick={() => frameImage("cover")}>Fill label</button><button className="button button-quiet" type="button" onClick={() => rotateImage(-1)}>Rotate left</button><button className="button button-quiet" type="button" onClick={() => rotateImage(1)}>Rotate right</button></>}<button className="button button-quiet" type="button" onClick={() => duplicate(selectedId)} disabled={!selected}>Duplicate</button></div></div>
+      <section className="artwork-history" aria-labelledby="artwork-history-heading">
+        <div className="history-heading">
+          <div><h2 id="artwork-history-heading">Recent uploads</h2><p>Original files only. Print attempts are not listed.</p></div>
+          {artworkHistory.length > 0 && <div className="history-nav"><button className="button button-quiet" type="button" aria-label="Earlier uploads" onClick={() => scrollHistory(-1)}>←</button><button className="button button-quiet" type="button" aria-label="Later uploads" onClick={() => scrollHistory(1)}>→</button></div>}
+        </div>
+        {artworkHistory.length > 0 ? <div className="history-carousel" ref={historyRef}>{artworkHistory.map((item) => <button className="history-card" type="button" key={item.id} onClick={() => { void addFromHistory(item); }} disabled={historyLoadingId !== null}>{item.mimeType.startsWith("image/") ? <img src={item.sourceUrl} alt="" /> : <span className="history-pdf" aria-hidden="true">PDF</span>}<span className="history-name">{item.name}</span>{historyLoadingId === item.id && <span className="history-loading">Loading…</span>}</button>)}</div> : <p className="history-empty">Your next uploaded image or PDF will appear here.</p>}
+      </section>
       <section className="editor-layout">
         <aside className="layers-panel"><div className="panel-heading"><h2>Layers</h2><span>{elements.length}</span></div><div className="layer-list">{elements.map((element, index) => <button className={`layer-row ${selectedId === element.id ? "selected" : ""}`} type="button" key={element.id} onClick={() => setSelectedId(element.id)}><span className="layer-number">{String(index + 1).padStart(2, "0")}</span><span className="layer-label">{element.type === "text" ? element.text || "Empty text" : "Image"}</span><span className="layer-kind">{element.type}</span></button>)}</div>{elements.length === 0 && <p className="empty-copy">Add text or an image to get started.</p>}</aside>
         <section className="canvas-column"><div className="canvas-heading"><h2>{document.name}</h2><span className="canvas-size">{width} × {height}</span></div><div className={`canvas-stage ${isDropTarget ? "drop-target" : ""}`} onDragEnter={(event) => { event.preventDefault(); setIsDropTarget(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setIsDropTarget(false)} onDrop={handleDrop}>{isDropTarget && <div className="drop-overlay">Drop image or PDF</div>}<div ref={paperRef} className="paper-frame" style={{ aspectRatio: `${width} / ${height}` }} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}><div className="paper-svg" dangerouslySetInnerHTML={{ __html: previewArtifact.source }} />{imageSelection && <div className="image-selection" style={selectionStyle} aria-label="Selected image frame">{RESIZE_CORNERS.map(({ corner, name, className }) => <button key={name} className={`resize-handle ${className}`} type="button" aria-label={`Resize from ${name} corner`} onPointerDown={(event) => onResizePointerDown(event, corner)} onPointerMove={onResizePointerMove} onPointerUp={finishResize} onPointerCancel={cancelResize} />)}</div>}</div></div></section>
