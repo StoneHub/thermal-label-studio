@@ -2,7 +2,7 @@
 
 Thermal Label Studio is a local label editor for people and software agents. The web app supports direct canvas editing, while the MCP adapter exposes the same document and rendering core to other software.
 
-Printer discovery and delivery belong to Fleet. The web app can prepare one fixed `PrintIntent` for Fleet's OFFNOVA adapter. This repository does not open raw printer sockets or claim that a physical label printed.
+Printer discovery and delivery belong to Fleet. The web app can prepare one fixed `PrintIntent` for Fleet's Phomemo PM-241-BT adapter. This repository does not open raw printer sockets or claim that a physical label printed.
 
 ## Current slice
 
@@ -25,6 +25,13 @@ Open `http://localhost:5173`.
 
 The production web build uses relative assets and system fonts. It can be served as static files by the Pi print node without running Node.js on the Pi.
 
+## Editing and printing
+
+- Undo and redo up to 40 edits using the toolbar or Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z. Framing and rotation each count as one edit. Edit history lasts for the current browser session.
+- The printer connection bar checks the fixed Pi adapter when the editor opens. Refresh it after reconnecting the Pi or printer. Printing checks readiness again before preparing a label.
+- Print results remain visible until dismissed, including on phones. An interrupted request is never retried automatically; check the printer before submitting again.
+- The standalone development server supports editing. Printing and saved uploads require Fleet's Pi service at the same origin.
+
 ## Run the MCP adapter
 
 ```bash
@@ -36,9 +43,9 @@ See `apps/mcp/README.md` for local client configuration and current boundaries.
 ## Verification
 
 ```bash
+pnpm build
 pnpm typecheck
 pnpm test
-pnpm build
 ```
 
 ## Domain and agent instructions

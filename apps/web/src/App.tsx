@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  createLabelWorkspace,
   renderLabelDocument,
   type LabelDocument,
   type LabelImageElement,
@@ -24,8 +23,9 @@ import {
   type ResizeCorner,
 } from "./lib/editorModel";
 import { prepareLabelPrintIntent, submitLabelPrintIntent } from "./lib/printIntent";
+import { createEditorSession } from "./lib/editorSession";
+import { readPrinterStatus, type PrinterStatus } from "./lib/printerStatus";
 
-type Workspace = ReturnType<typeof createLabelWorkspace>;
 type DragState = { elementId: string; startX: number; startY: number; originX: number; originY: number };
 type ResizeState = {
   element: LabelImageElement;
@@ -40,13 +40,26 @@ const RESIZE_CORNERS: Array<{ corner: ResizeCorner; name: string; className: str
 ];
 
 const App: React.FC = () => {
-  const workspace = useMemo(() => {
-    const next = createLabelWorkspace();
-    next.execute({ type: "create-document", document: initialDocument });
-    return next;
+  const workspace = useMemo(() => createEditorSession(initialDocument), []);
+  const [document, setDocument] = useState<LabelDocument>(workspace.current);
+  const [artifact, setArtifact] = useState<RenderArtifact>(() => workspace.render());
+  const [printer, setPrinter] = useState<PrinterStatus | null>(null);
+  const [checkingPrinter, setCheckingPrinter] = useState(false);
+  const [printMessage, setPrintMessage] = useState("");
+  const printingRef = useRef(false);
+  const refreshPrinter = useCallback(async () => {
+    setCheckingPrinter(true);
+    try {
+      const next = await readPrinterStatus();
+      setPrinter(next);
+      return next;
+    } catch (error) {
+      const next = { ready: false, detail: error instanceof Error ? error.message : "Cannot reach the Pi." };
+      setPrinter(next);
+      return next;
+    } finally { setCheckingPrinter(false); }
   }, []);
-  const [document, setDocument] = useState<LabelDocument>(() => workspace.getDocument(initialDocument.id) ?? initialDocument);
-  const [artifact, setArtifact] = useState<RenderArtifact>(() => workspace.render(initialDocument.id));
+  useEffect(() => { void refreshPrinter(); }, [refreshPrinter]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [nameDraft, setNameDraft] = useState(document.name);
   const [textDraft, setTextDraft] = useState("");
@@ -81,17 +94,29 @@ const App: React.FC = () => {
 
   const elements = document.elements;
   const selected = elements.find((element) => element.id === selectedId);
-  const apply = useCallback((next: WorkspaceCommand) => {
+  const apply = useCallback((next: WorkspaceCommand | readonly WorkspaceCommand[]) => {
     try {
-      const nextDocument = workspace.execute(next).document;
+      const nextDocument = workspace.execute(next);
       setDocument(nextDocument);
-      setArtifact(workspace.render(nextDocument.id));
+      setArtifact(workspace.render());
       return nextDocument;
     } catch {
       showStatus("That change could not be applied.");
       return undefined;
     }
   }, [showStatus, workspace]);
+
+  const travelHistory = useCallback((direction: "undo" | "redo") => {
+    const next = workspace[direction]();
+    setDocument(next);
+    setArtifact(workspace.render());
+    setNameDraft(next.name);
+    setSelectedId((id) => next.elements.some((element) => element.id === id) ? id : null);
+    setDrag(null);
+    setResize(null);
+    setResizePreview(null);
+    showStatus(direction === "undo" ? "Edit undone" : "Edit restored");
+  }, [workspace, showStatus]);
 
   useEffect(() => {
     if (selected?.type === "text") setTextDraft(selected.text);
@@ -100,7 +125,8 @@ const App: React.FC = () => {
 
   const rename = useCallback(() => {
     const name = nameDraft.trim();
-    if (!name || name === document.name) return;
+    if (!name) { setNameDraft(document.name); return; }
+    if (name === document.name) return;
     if (apply({ type: "rename-document", documentId: document.id, name })) showStatus(`Renamed to ${name}`);
   }, [apply, document.id, document.name, nameDraft, showStatus]);
 
@@ -189,8 +215,10 @@ const App: React.FC = () => {
   const frameImage = useCallback((fit: "contain" | "cover") => {
     if (!selected || selected.type !== "image") return;
     const geometry = frameImageToLabel(selected, document.size);
-    if (!apply({ type: "resize-element", documentId: document.id, elementId: selected.id, ...geometry })) return;
-    if (!apply({ type: "update-image", documentId: document.id, elementId: selected.id, fit })) return;
+    if (!apply([
+      { type: "resize-element", documentId: document.id, elementId: selected.id, ...geometry },
+      { type: "update-image", documentId: document.id, elementId: selected.id, fit },
+    ])) return;
     showStatus(fit === "cover" ? "Image fills the label" : "Whole image fitted to the label");
   }, [apply, document.id, document.size, selected, showStatus]);
   const rotateImage = useCallback((direction: -1 | 1) => {
@@ -207,8 +235,10 @@ const App: React.FC = () => {
     const geometry = currentlySnapped
       ? frameImageToLabel(rotated, document.size)
       : constrainImageGeometry(rotated, rotation, document.size);
-    if (!apply({ type: "update-image", documentId: document.id, elementId: selected.id, rotation })) return;
-    if (!apply({ type: "resize-element", documentId: document.id, elementId: selected.id, ...geometry })) return;
+    if (!apply([
+      { type: "update-image", documentId: document.id, elementId: selected.id, rotation },
+      { type: "resize-element", documentId: document.id, elementId: selected.id, ...geometry },
+    ])) return;
     showStatus(`Rotated to ${rotation}°`);
   }, [apply, document.id, document.size, selected, showStatus]);
   const removeSelected = useCallback(() => {
@@ -216,31 +246,43 @@ const App: React.FC = () => {
     if (apply({ type: "remove-element", documentId: document.id, elementId: selected.id })) { setSelectedId(null); showStatus("Element deleted"); }
   }, [apply, document.id, selected, showStatus]);
   const printOnce = useCallback(async () => {
-    if (isPrinting) return;
+    if (printingRef.current || document.elements.length === 0) return;
+    printingRef.current = true;
     setIsPrinting(true);
+    setPrintMessage("Checking printer…");
     try {
+      const readiness = await refreshPrinter();
+      if (!readiness.ready) throw new Error(readiness.detail);
+      setPrintMessage("Preparing label…");
       const intent = await prepareLabelPrintIntent(artifact);
+      setPrintMessage("Sending one label…");
       const receipt = await submitLabelPrintIntent(intent);
-      showStatus(receipt.detail);
+      setPrintMessage(`${receipt.detail} Check the physical label before printing again.`);
     } catch (error) {
-      showStatus(error instanceof Error ? error.message : "The print node rejected the label.");
+      setPrintMessage(error instanceof Error ? error.message : "The print result is unknown. Check the printer before printing again.");
     } finally {
+      printingRef.current = false;
       setIsPrinting(false);
     }
-  }, [artifact, isPrinting, showStatus]);
+  }, [artifact, document.elements.length, refreshPrinter]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const editing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
       const modifier = event.metaKey || event.ctrlKey;
-      if (modifier && event.key.toLowerCase() === "c" && !editing) { event.preventDefault(); copySelected(); }
+      if (modifier && !editing && (event.key.toLowerCase() === "z" || event.key.toLowerCase() === "y")) {
+        event.preventDefault();
+        travelHistory(event.shiftKey || event.key.toLowerCase() === "y" ? "redo" : "undo");
+      }
+      else if (event.key === "Escape" && !editing) setSelectedId(null);
+      else if (modifier && event.key.toLowerCase() === "c" && !editing) { event.preventDefault(); copySelected(); }
       else if (modifier && event.key.toLowerCase() === "d" && !editing) { event.preventDefault(); duplicate(selectedId); }
       else if ((event.key === "Delete" || event.key === "Backspace") && !editing) { event.preventDefault(); removeSelected(); }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [copySelected, duplicate, removeSelected, selectedId]);
+  }, [copySelected, duplicate, removeSelected, selectedId, travelHistory]);
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) => {
       const directFiles = Array.from(event.clipboardData?.files ?? []);
@@ -296,7 +338,7 @@ const App: React.FC = () => {
     const target = event.target as Element;
     const elementId = target.closest<SVGElement>("[data-element-id]")?.getAttribute("data-element-id");
     const element = elementId ? document.elements.find((candidate) => candidate.id === elementId) : undefined;
-    if (!element) return;
+    if (!element) { setSelectedId(null); return; }
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     setSelectedId(element.id);
@@ -325,7 +367,7 @@ const App: React.FC = () => {
         : { x: drag.originX + offset.x, y: drag.originY + offset.y };
       apply({ type: "move-element", documentId: document.id, elementId: drag.elementId, x: position.x, y: position.y });
     }
-  }, [apply, document.id, drag, dragOffset]);
+  }, [apply, document.id, document.elements, document.size, drag, dragOffset]);
   const onPointerCancel = useCallback(() => {
     setDrag(null);
     setDragOffset({ x: 0, y: 0 });
@@ -393,19 +435,26 @@ const App: React.FC = () => {
       <header className="editor-header">
         <div className="brand-lockup"><span className="brand-mark" aria-hidden="true">TL</span><h1>Thermal Label Studio</h1></div>
         <div className="document-name-control"><input aria-label="Label name" value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} onBlur={rename} onKeyDown={(event) => { if (event.key === "Enter") rename(); }} /></div>
-        <div className="header-actions">{status && <span className="status-message" role="status">{status}</span>}<button className="button button-primary" type="button" onClick={() => { void printOnce(); }} disabled={isPrinting}>{isPrinting ? "Preparing…" : "Print once"}</button><button className="button button-quiet" type="button" onClick={copySelected} disabled={!selected}>Copy</button><button className="button button-quiet" type="button" onClick={pasteSelected} disabled={!copiedId && !selectedId}>Paste</button><button className="button button-danger" type="button" onClick={removeSelected} disabled={!selected}>Delete</button></div>
+        <div className="header-actions"><button className="button button-primary" type="button" onClick={() => { void printOnce(); }} disabled={isPrinting || !printer?.ready || elements.length === 0}>{isPrinting ? "Printing…" : "Print once"}</button><button className="button button-quiet" type="button" onClick={copySelected} disabled={!selected}>Copy</button><button className="button button-quiet" type="button" onClick={pasteSelected} disabled={!copiedId && !selectedId}>Paste</button><button className="button button-danger" type="button" onClick={removeSelected} disabled={!selected}>Delete</button></div>
       </header>
-      <div className="editor-toolbar"><div className="toolbar-group"><button className="button button-primary" type="button" onClick={addText}>Add Text</button><button className="button" type="button" onClick={() => fileInputRef.current?.click()}>Add Image or PDF</button><input ref={fileInputRef} type="file" accept="image/*,application/pdf,.pdf" multiple hidden onChange={(event) => { void addFiles(Array.from(event.target.files ?? [])); event.currentTarget.value = ""; }} /></div><div className="toolbar-group toolbar-group-right">{selected?.type === "image" && <><button className="button" type="button" onClick={() => frameImage("contain")}>Fit whole image</button><button className="button" type="button" onClick={() => frameImage("cover")}>Fill label</button><button className="button button-quiet" type="button" onClick={() => rotateImage(-1)}>Rotate left</button><button className="button button-quiet" type="button" onClick={() => rotateImage(1)}>Rotate right</button></>}<button className="button button-quiet" type="button" onClick={() => duplicate(selectedId)} disabled={!selected}>Duplicate</button></div></div>
+      <section className="printer-strip" aria-label="Printer connection">
+        <span className={`printer-indicator ${printer?.ready ? "ready" : ""}`} aria-hidden="true" />
+        <div className="printer-summary"><strong>{printer?.ready ? "Printer ready" : printer ? "Printer unavailable" : "Connecting to printer…"}</strong><span>{printer?.detail ?? "Checking the Pi print node."}</span></div>
+        <button className="button button-quiet" onClick={() => { void refreshPrinter(); }} disabled={checkingPrinter || isPrinting}>{checkingPrinter ? "Checking…" : "Refresh"}</button>
+      </section>
+      {printMessage && <div className="print-feedback" role="status">{printMessage}<button className="button button-quiet" onClick={() => setPrintMessage("")} disabled={isPrinting} aria-label="Dismiss print message">Dismiss</button></div>}
+      {status && <div className="status-message" role="status">{status}</div>}
+      <div className="editor-toolbar"><div className="toolbar-group"><button className="button button-quiet" onClick={() => travelHistory("undo")} disabled={!workspace.canUndo} title="Undo (Ctrl/Cmd+Z)">Undo</button><button className="button button-quiet" onClick={() => travelHistory("redo")} disabled={!workspace.canRedo} title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button><button className="button button-primary" type="button" onClick={addText}>Add Text</button><button className="button" type="button" onClick={() => fileInputRef.current?.click()}>Add Image or PDF</button><input ref={fileInputRef} type="file" accept="image/*,application/pdf,.pdf" multiple hidden onChange={(event) => { void addFiles(Array.from(event.target.files ?? [])); event.currentTarget.value = ""; }} /></div><div className="toolbar-group toolbar-group-right">{selected?.type === "image" && <><button className="button" type="button" onClick={() => frameImage("contain")}>Fit whole image</button><button className="button" type="button" onClick={() => frameImage("cover")}>Fill label</button><button className="button button-quiet" type="button" onClick={() => rotateImage(-1)}>Rotate left</button><button className="button button-quiet" type="button" onClick={() => rotateImage(1)}>Rotate right</button></>}<button className="button button-quiet" type="button" onClick={() => duplicate(selectedId)} disabled={!selected}>Duplicate</button></div></div>
       <section className="artwork-history" aria-labelledby="artwork-history-heading">
         <div className="history-heading">
-          <div><h2 id="artwork-history-heading">Recent uploads</h2><p>Original files only. Print attempts are not listed.</p></div>
+          <div><h2 id="artwork-history-heading">Recent uploads</h2><p>Choose a saved image or PDF to add it to your label.</p></div>
           {artworkHistory.length > 0 && <div className="history-nav"><button className="button button-quiet" type="button" aria-label="Earlier uploads" onClick={() => scrollHistory(-1)}>←</button><button className="button button-quiet" type="button" aria-label="Later uploads" onClick={() => scrollHistory(1)}>→</button></div>}
         </div>
-        {artworkHistory.length > 0 ? <div className="history-carousel" ref={historyRef}>{artworkHistory.map((item) => <button className="history-card" type="button" key={item.id} onClick={() => { void addFromHistory(item); }} disabled={historyLoadingId !== null}>{item.mimeType.startsWith("image/") ? <img src={item.sourceUrl} alt="" /> : <span className="history-pdf" aria-hidden="true">PDF</span>}<span className="history-name">{item.name}</span>{historyLoadingId === item.id && <span className="history-loading">Loading…</span>}</button>)}</div> : <p className="history-empty">Your next uploaded image or PDF will appear here.</p>}
+        {artworkHistory.length > 0 ? <div className="history-carousel" ref={historyRef}>{artworkHistory.map((item) => <button className="history-card" type="button" key={item.id} onClick={() => { void addFromHistory(item); }} disabled={historyLoadingId !== null}>{item.mimeType.startsWith("image/") ? <img src={item.sourceUrl} alt="" loading="lazy" decoding="async" /> : <span className="history-pdf" aria-hidden="true">PDF</span>}<span className="history-name">{item.name}</span>{historyLoadingId === item.id && <span className="history-loading">Loading…</span>}</button>)}</div> : <p className="history-empty">Your next uploaded image or PDF will appear here.</p>}
       </section>
       <section className="editor-layout">
-        <aside className="layers-panel"><div className="panel-heading"><h2>Layers</h2><span>{elements.length}</span></div><div className="layer-list">{elements.map((element, index) => <button className={`layer-row ${selectedId === element.id ? "selected" : ""}`} type="button" key={element.id} onClick={() => setSelectedId(element.id)}><span className="layer-number">{String(index + 1).padStart(2, "0")}</span><span className="layer-label">{element.type === "text" ? element.text || "Empty text" : "Image"}</span><span className="layer-kind">{element.type}</span></button>)}</div>{elements.length === 0 && <p className="empty-copy">Add text or an image to get started.</p>}</aside>
-        <section className="canvas-column"><div className="canvas-heading"><h2>{document.name}</h2><span className="canvas-size">{width} × {height}</span></div><div className={`canvas-stage ${isDropTarget ? "drop-target" : ""}`} onDragEnter={(event) => { event.preventDefault(); setIsDropTarget(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setIsDropTarget(false)} onDrop={handleDrop}>{isDropTarget && <div className="drop-overlay">Drop image or PDF</div>}<div ref={paperRef} className="paper-frame" style={{ aspectRatio: `${width} / ${height}` }} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}><div className="paper-svg" dangerouslySetInnerHTML={{ __html: previewArtifact.source }} />{imageSelection && <div className="image-selection" style={selectionStyle} aria-label="Selected image frame">{RESIZE_CORNERS.map(({ corner, name, className }) => <button key={name} className={`resize-handle ${className}`} type="button" aria-label={`Resize from ${name} corner`} onPointerDown={(event) => onResizePointerDown(event, corner)} onPointerMove={onResizePointerMove} onPointerUp={finishResize} onPointerCancel={cancelResize} />)}</div>}</div></div></section>
+        <aside className="layers-panel"><div className="panel-heading"><h2>Layers</h2><span>{elements.length}</span></div><div className="layer-list">{elements.map((element, index) => <button className={`layer-row ${selectedId === element.id ? "selected" : ""}`} aria-pressed={selectedId === element.id} type="button" key={element.id} onClick={() => setSelectedId(element.id)}><span className="layer-number">{String(index + 1).padStart(2, "0")}</span><span className="layer-label">{element.type === "text" ? element.text || "Empty text" : element.type === "image" ? element.alt || "Image" : "Rectangle"}</span><span className="layer-kind">{element.type}</span></button>)}</div>{elements.length === 0 && <p className="empty-copy">Add text or an image to get started.</p>}</aside>
+        <section className="canvas-column"><div className="canvas-heading"><h2>{document.name}</h2><span className="canvas-size">4 × 6 in · {width} × {height}</span></div><div className={`canvas-stage ${isDropTarget ? "drop-target" : ""}`} onDragEnter={(event) => { event.preventDefault(); setIsDropTarget(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setIsDropTarget(false)} onDrop={handleDrop}>{isDropTarget && <div className="drop-overlay">Drop image or PDF</div>}<div ref={paperRef} className="paper-frame" style={{ aspectRatio: `${width} / ${height}` }} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}><div className="paper-svg" dangerouslySetInnerHTML={{ __html: previewArtifact.source }} />{imageSelection && <div className="image-selection" style={selectionStyle} aria-label="Selected image frame">{RESIZE_CORNERS.map(({ corner, name, className }) => <button key={name} className={`resize-handle ${className}`} type="button" aria-label={`Resize from ${name} corner`} onPointerDown={(event) => onResizePointerDown(event, corner)} onPointerMove={onResizePointerMove} onPointerUp={finishResize} onPointerCancel={cancelResize} />)}</div>}</div></div></section>
         <aside className="properties-panel"><div className="panel-heading"><h2>Properties</h2></div>{selected ? <div className="properties-content"><p className="selected-kind">{selected.type === "text" ? "Text" : selected.type === "image" ? "Image" : "Rectangle"}</p>{selected.type === "text" ? <><label className="field-label" htmlFor="selected-text">Text</label><textarea id="selected-text" value={textDraft} onChange={(event) => setTextDraft(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") editText(); }} /><button className="button button-primary full-width" type="button" onClick={editText}>Update text</button></> : selected.type === "image" ? <><p className="empty-copy">Drag to move. Drag a corner handle to scale. The selected frame stays inside the printable label.</p><div className="image-controls"><span className="field-label">Current framing</span><p className="image-setting-summary">{selected.fit === "cover" ? "Fills label with centered crop" : "Shows the whole image"} · {selected.rotation ?? 0}°</p><p className="control-help">Use the framing and rotate buttons above the label.</p></div></> : <p className="empty-copy">Drag the rectangle on the canvas to reposition it.</p>}<div className="property-position"><span>Position</span><strong>{Math.round(selected.x)}, {Math.round(selected.y)}</strong></div></div> : <p className="empty-copy">Select a layer to edit its properties.</p>}</aside>
       </section>
     </main>

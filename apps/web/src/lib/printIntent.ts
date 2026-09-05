@@ -134,14 +134,20 @@ export async function prepareLabelPrintIntent(artifact: RenderArtifact): Promise
 }
 
 export async function submitLabelPrintIntent(intent: LabelPrintIntent): Promise<TransportReceipt> {
-  const response = await fetch("./api/print-label-image", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(intent),
-  });
-  const body = await response.json().catch(() => ({ detail: `Print node returned HTTP ${response.status}.` })) as Partial<TransportReceipt>;
-  if (!response.ok || body.accepted !== true || body.state !== "accepted") {
-    throw new Error(typeof body.detail === "string" ? body.detail : "The print node rejected the label.");
+  let response: Response;
+  try {
+    response = await fetch("./api/print-label-image", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(intent),
+      signal: AbortSignal.timeout(30000),
+    });
+  } catch {
+    throw new Error("The print result is unknown because the connection was lost. Check the printer before printing again.");
+  }
+  const body = await response.json().catch(() => ({ detail: "The print result is unknown because the Pi returned an unreadable receipt. Check the printer before printing again." })) as Partial<TransportReceipt>;
+  if (!response.ok || body?.accepted !== true || body?.state !== "accepted") {
+    throw new Error(typeof body?.detail === "string" ? body.detail : "The print result could not be confirmed. Check the printer before printing again.");
   }
   return Object.freeze({
     taskId: typeof body.taskId === "string" ? body.taskId : intent.taskId,
