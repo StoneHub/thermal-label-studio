@@ -20,6 +20,8 @@ export interface LabelTextElement {
   readonly fill?: string;
   readonly fontFamily?: string;
   readonly fontWeight?: number;
+  readonly lineHeight?: number;
+  readonly letterSpacing?: number;
 }
 
 export interface LabelRectangleElement {
@@ -96,6 +98,8 @@ export interface AddTextCommand {
   readonly fill?: string;
   readonly fontFamily?: string;
   readonly fontWeight?: number;
+  readonly lineHeight?: number;
+  readonly letterSpacing?: number;
 }
 
 export interface UpdateTextCommand {
@@ -103,8 +107,8 @@ export interface UpdateTextCommand {
   readonly documentId: string;
   readonly elementId: string;
   readonly text?: string;
-  readonly updates?: Partial<Pick<LabelTextElement, "text" | "fontSize" | "fill" | "fontFamily" | "fontWeight">>;
-  readonly patch?: Partial<Pick<LabelTextElement, "text" | "fontSize" | "fill" | "fontFamily" | "fontWeight">>;
+  readonly updates?: Partial<Pick<LabelTextElement, "text" | "fontSize" | "fill" | "fontFamily" | "fontWeight" | "lineHeight" | "letterSpacing">>;
+  readonly patch?: Partial<Pick<LabelTextElement, "text" | "fontSize" | "fill" | "fontFamily" | "fontWeight" | "lineHeight" | "letterSpacing">>;
 }
 
 export interface MoveElementCommand {
@@ -322,6 +326,8 @@ function validateElement(value: unknown, index: number): LabelElement {
       ...(value.fill === undefined ? {} : { fill: requireString(value.fill, `elements[${index}].fill`) }),
       ...(value.fontFamily === undefined ? {} : { fontFamily: requireString(value.fontFamily, `elements[${index}].fontFamily`) }),
       ...(value.fontWeight === undefined ? {} : { fontWeight: requirePositive(value.fontWeight, `elements[${index}].fontWeight`) }),
+      ...(value.lineHeight === undefined ? {} : { lineHeight: requirePositive(value.lineHeight, `elements[${index}].lineHeight`) }),
+      ...(value.letterSpacing === undefined ? {} : { letterSpacing: requireFinite(value.letterSpacing, `elements[${index}].letterSpacing`) }),
     };
     return element;
   }
@@ -474,6 +480,8 @@ export function createLabelWorkspace(initialDocuments: readonly NewLabelDocument
           fill: command.fill ?? supplied.fill,
           fontFamily: command.fontFamily ?? supplied.fontFamily,
           fontWeight: command.fontWeight ?? supplied.fontWeight,
+          lineHeight: command.lineHeight ?? supplied.lineHeight,
+          letterSpacing: command.letterSpacing ?? supplied.letterSpacing,
         }, previous.elements.length);
         return replace(updatedDocument(previous, [...previous.elements, element]), previous, command);
       }
