@@ -32,6 +32,7 @@ import { createEditorSession } from "./lib/editorSession";
 import { readPrinterStatus, type PrinterStatus } from "./lib/printerStatus";
 
 type DragState = { elementId: string; startX: number; startY: number; originX: number; originY: number };
+type FlyoutPanel = "edit" | "layers" | "uploads" | "printer";
 type ResizeState = {
   element: LabelImageElement;
   corner: ResizeCorner;
@@ -99,12 +100,14 @@ const App: React.FC = () => {
   const [isPrinting, setIsPrinting] = useState(false);
   const [artworkHistory, setArtworkHistory] = useState<ArtworkHistoryItem[]>([]);
   const [historyLoadingId, setHistoryLoadingId] = useState<string | null>(null);
+  const [activePanel, setActivePanel] = useState<FlyoutPanel | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const textDraftRef = useRef("");
   const focusTextOnSelectionRef = useRef<string | null>(null);
-  const historyRef = useRef<HTMLDivElement>(null);
   const paperRef = useRef<HTMLDivElement>(null);
+  const flyoutRef = useRef<HTMLElement>(null);
+  const lastFocusRef = useRef<HTMLElement | null>(null);
   const statusTimer = useRef<number | undefined>(undefined);
 
   const showStatus = useCallback((message: string) => {
@@ -171,8 +174,9 @@ const App: React.FC = () => {
     // The direct focus in addText handles browsers that require a user gesture;
     // this is the post-render fallback once the textarea exists in the tree.
     const focusTimer = window.setTimeout(() => {
-      textAreaRef.current?.focus({ preventScroll: true });
-      textAreaRef.current?.select();
+      const textarea = flyoutRef.current?.querySelector<HTMLTextAreaElement>("#selected-text");
+      textarea?.focus({ preventScroll: true });
+      textarea?.select();
     }, 0);
     return () => window.clearTimeout(focusTimer);
   }, [selectedId]);
@@ -187,13 +191,15 @@ const App: React.FC = () => {
   const addText = useCallback(() => {
     const id = `text-${Date.now().toString(36)}`;
     if (apply({ type: "add-text", documentId: document.id, element: { id, type: "text", text: "", x: 80, y: 140, width: 640, height: 160, fontSize: 42, fontFamily: "Arial, sans-serif", fontWeight: 700, fill: "#17212b" } })) {
+      lastFocusRef.current = window.document.activeElement instanceof HTMLElement ? window.document.activeElement : null;
       focusTextOnSelectionRef.current = id;
       flushSync(() => {
         setSelectedId(id);
+        setActivePanel("edit");
         textDraftRef.current = "";
         setTextDraft("");
       });
-      textAreaRef.current?.focus({ preventScroll: true });
+      flyoutRef.current?.querySelector<HTMLTextAreaElement>("#selected-text")?.focus({ preventScroll: true });
       showStatus("Text added — start typing");
     }
   }, [apply, document.id, showStatus]);
@@ -249,10 +255,6 @@ const App: React.FC = () => {
     }
   }, [addArtwork, historyLoadingId, showStatus]);
 
-  const scrollHistory = useCallback((direction: -1 | 1) => {
-    historyRef.current?.scrollBy({ left: direction * 420, behavior: "smooth" });
-  }, []);
-
   const addFiles = useCallback(async (files: readonly File[]) => {
     for (const file of files) await addArtwork(file);
   }, [addArtwork]);
@@ -280,6 +282,10 @@ const App: React.FC = () => {
     }
     if (apply(commands)) showStatus("Text updated");
   }, [apply, selectedId, showStatus, workspace]);
+  const finishTextEdit = useCallback(() => {
+    editText();
+    setActivePanel(null);
+  }, [editText]);
   const frameImage = useCallback((fit: "contain" | "cover") => {
     if (!selected || selected.type !== "image") return;
     const geometry = frameImageToLabel(selected, document.size);
@@ -339,6 +345,43 @@ const App: React.FC = () => {
   }, [artifact, document.elements.length, printBlocked, refreshPrinter, textOverflowsLabel]);
 
   useEffect(() => {
+    if (!activePanel) {
+      lastFocusRef.current?.focus();
+      lastFocusRef.current = null;
+      return;
+    }
+    if (!lastFocusRef.current) lastFocusRef.current = window.document.activeElement instanceof HTMLElement ? window.document.activeElement : null;
+    const focusTimer = window.setTimeout(() => {
+      const target = activePanel === "edit" && selected?.type === "text"
+        ? flyoutRef.current?.querySelector<HTMLElement>("#selected-text")
+        : flyoutRef.current?.querySelector<HTMLElement>("[data-flyout-autofocus]");
+      target?.focus({ preventScroll: true });
+    }, 0);
+    const onTab = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(flyoutRef.current?.querySelectorAll<HTMLElement>("button, input, textarea, [href], [tabindex]:not([tabindex='-1'])") ?? []).filter((element) => !element.hasAttribute("disabled"));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const activeElement = window.document.activeElement;
+      if (!flyoutRef.current?.contains(activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", onTab);
+    return () => {
+      window.clearTimeout(focusTimer);
+      window.removeEventListener("keydown", onTab);
+    };
+  }, [activePanel, selected?.type]);
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const editing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
@@ -347,6 +390,11 @@ const App: React.FC = () => {
         event.preventDefault();
         travelHistory(event.shiftKey || event.key.toLowerCase() === "y" ? "redo" : "undo");
       }
+      else if (event.key === "Escape" && activePanel) {
+        event.preventDefault();
+        editText();
+        setActivePanel(null);
+      }
       else if (event.key === "Escape" && !editing) setSelectedId(null);
       else if (modifier && event.key.toLowerCase() === "c" && !editing) { event.preventDefault(); copySelected(); }
       else if (modifier && event.key.toLowerCase() === "d" && !editing) { event.preventDefault(); duplicate(selectedId); }
@@ -354,7 +402,7 @@ const App: React.FC = () => {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [copySelected, duplicate, removeSelected, selectedId, travelHistory]);
+  }, [activePanel, copySelected, duplicate, editText, removeSelected, selectedId, travelHistory]);
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) => {
       const directFiles = Array.from(event.clipboardData?.files ?? []);
@@ -512,33 +560,26 @@ const App: React.FC = () => {
   } : undefined;
   return (
     <main className="editor-shell">
-      <header className="editor-header">
-        <div className="brand-lockup"><span className="brand-mark" aria-hidden="true">TL</span><h1>Thermal Label Studio</h1></div>
+      <header className="editor-header workspace-header">
+        <button className="workspace-menu-button" type="button" onClick={() => setActivePanel("layers")} aria-label="Open workspace menu" aria-expanded={activePanel !== null}>☰</button>
+        <span className="brand-mark" aria-hidden="true">TL</span>
         <div className="document-name-control"><input aria-label="Label name" value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} onBlur={rename} onKeyDown={(event) => { if (event.key === "Enter") rename(); }} /></div>
-        <div className="header-actions"><button className="button button-primary header-print-button" type="button" onClick={() => { void printOnce(); }} disabled={isPrinting || !printer?.ready || elements.length === 0 || printBlocked} title={printBlocked ? "Resolve text before printing" : undefined}>{isPrinting ? "Printing…" : "Print once"}</button><button className="button button-quiet" type="button" onClick={copySelected} disabled={!selected}>Copy</button><button className="button button-quiet" type="button" onClick={pasteSelected} disabled={!copiedId && !selectedId}>Paste</button><button className="button button-danger" type="button" onClick={removeSelected} disabled={!selected}>Delete</button></div>
+        <div className="workspace-header-actions"><button className="workspace-printer-button" type="button" onClick={() => setActivePanel("printer")} aria-label="Open printer details"><span className={`printer-indicator ${printer?.ready ? "ready" : ""}`} aria-hidden="true" /><span className="workspace-printer-label">{printer?.ready ? "Ready" : "Printer"}</span></button><button className="button button-primary workspace-print-button" type="button" onClick={() => { void printOnce(); }} disabled={isPrinting || !printer?.ready || elements.length === 0 || printBlocked} title={printBlocked ? "Resolve text before printing" : undefined}>{isPrinting ? "Printing…" : "Print"}</button></div>
       </header>
-      <section className="printer-strip" aria-label="Printer connection">
-        <span className={`printer-indicator ${printer?.ready ? "ready" : ""}`} aria-hidden="true" />
-        <div className="printer-summary"><strong>{printer?.ready ? "Printer ready" : printer ? "Printer unavailable" : "Connecting to printer…"}</strong><span>{printer?.detail ?? "Checking the Pi print node."}</span></div>
-        <button className="button button-quiet" onClick={() => { void refreshPrinter(); }} disabled={checkingPrinter || isPrinting}>{checkingPrinter ? "Checking…" : "Refresh"}</button>
-      </section>
-      {printMessage && <div className="print-feedback" role="status">{printMessage}<button className="button button-quiet" onClick={() => setPrintMessage("")} disabled={isPrinting} aria-label="Dismiss print message">Dismiss</button></div>}
-      {textOverflowsLabel && <div className="print-feedback overflow-warning" role="alert">Text extends below the printable label. Move or shorten it before printing.</div>}
+      {(printMessage || textOverflowsLabel) && <div className="workspace-alerts">{printMessage && <div className="print-feedback" role="status">{printMessage}<button className="button button-quiet" onClick={() => setPrintMessage("")} disabled={isPrinting} aria-label="Dismiss print message">Dismiss</button></div>}{textOverflowsLabel && <div className="print-feedback overflow-warning" role="alert">Text extends below the printable label. Move or shorten it before printing.</div>}</div>}
       {status && <div className="status-message" role="status">{status}</div>}
-      <div className="editor-toolbar"><div className="toolbar-group"><button className="button button-quiet" onClick={() => travelHistory("undo")} disabled={!workspace.canUndo} title="Undo (Ctrl/Cmd+Z)">Undo</button><button className="button button-quiet" onClick={() => travelHistory("redo")} disabled={!workspace.canRedo} title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button><button className="button button-primary" type="button" onClick={addText}>Add Text</button><button className="button" type="button" onClick={() => fileInputRef.current?.click()}>Add Image or PDF</button><input ref={fileInputRef} type="file" accept="image/*,application/pdf,.pdf" multiple hidden onChange={(event) => { void addFiles(Array.from(event.target.files ?? [])); event.currentTarget.value = ""; }} /></div><div className="toolbar-group toolbar-group-right"><span className="toolbar-image-tools">{selected?.type === "image" && <><button className="button" type="button" onClick={() => frameImage("contain")}>Fit whole image</button><button className="button" type="button" onClick={() => frameImage("cover")}>Fill label</button><button className="button button-quiet" type="button" onClick={() => rotateImage(-1)}>Rotate left</button><button className="button button-quiet" type="button" onClick={() => rotateImage(1)}>Rotate right</button></>}</span><button className="button button-quiet" type="button" onClick={() => duplicate(selectedId)} disabled={!selected}>Duplicate</button></div></div>
-      <section className="artwork-history" aria-labelledby="artwork-history-heading">
-        <details className="history-details" open>
-          <summary className="history-summary"><span><strong id="artwork-history-heading">Recent uploads</strong><small>Saved images and PDFs</small></span><span className="details-chevron" aria-hidden="true">⌄</span></summary>
-          <div className="history-content">
-            {artworkHistory.length > 0 && <div className="history-nav"><button className="button button-quiet" type="button" aria-label="Earlier uploads" onClick={() => scrollHistory(-1)}>←</button><button className="button button-quiet" type="button" aria-label="Later uploads" onClick={() => scrollHistory(1)}>→</button></div>}
-            {artworkHistory.length > 0 ? <div className="history-carousel" ref={historyRef}>{artworkHistory.map((item) => <button className="history-card" type="button" key={item.id} onClick={() => { void addFromHistory(item); }} disabled={historyLoadingId !== null}>{item.mimeType.startsWith("image/") ? <img src={item.sourceUrl} alt="" loading="lazy" decoding="async" /> : <span className="history-pdf" aria-hidden="true">PDF</span>}<span className="history-name">{item.name}</span>{historyLoadingId === item.id && <span className="history-loading">Loading…</span>}</button>)}</div> : <p className="history-empty">Your next uploaded image or PDF will appear here.</p>}
-          </div>
-        </details>
-      </section>
-      <section className={`editor-layout ${selected?.type === "text" ? "editing-text" : ""}`}>
-        <aside className="layers-panel"><details className="layers-details" open><summary className="panel-heading"><h2>Layers</h2><span>{elements.length}</span><span className="details-chevron" aria-hidden="true">⌄</span></summary><div className="layer-list">{elements.map((element, index) => <button className={`layer-row ${selectedId === element.id ? "selected" : ""}`} aria-pressed={selectedId === element.id} type="button" key={element.id} onClick={() => setSelectedId(element.id)}><span className="layer-number">{String(index + 1).padStart(2, "0")}</span><span className="layer-label">{element.type === "text" ? element.text || "Empty text" : element.type === "image" ? element.alt || "Image" : "Rectangle"}</span><span className="layer-kind">{element.type}</span></button>)}</div>{elements.length === 0 && <p className="empty-copy">Add text or an image to get started.</p>}</details></aside>
-        <section className="canvas-column"><div className="mobile-action-bar" aria-label="Quick label actions"><button className="button button-primary" type="button" onClick={addText}>+ Text</button><button className="button" type="button" onClick={() => fileInputRef.current?.click()}>Import</button><button className="button button-quiet" type="button" onClick={() => travelHistory("undo")} disabled={!workspace.canUndo}>Undo</button><button className="button button-quiet" type="button" onClick={() => { void printOnce(); }} disabled={isPrinting || !printer?.ready || elements.length === 0 || printBlocked}>{isPrinting ? "Printing…" : "Print"}</button></div><div className="canvas-heading"><h2>{document.name}</h2><span className="canvas-size">4 × 6 in · {width} × {height}</span></div><div className={`canvas-stage ${isDropTarget ? "drop-target" : ""}`} onDragEnter={(event) => { event.preventDefault(); setIsDropTarget(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setIsDropTarget(false)} onDrop={handleDrop}>{isDropTarget && <div className="drop-overlay">Drop image or PDF</div>}<div ref={paperRef} className="paper-frame" style={{ aspectRatio: `${width} / ${height}` }} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}><div className="paper-svg" dangerouslySetInnerHTML={{ __html: previewArtifact.source }} />{imageSelection && <div className="image-selection" style={selectionStyle} aria-label="Selected image frame">{RESIZE_CORNERS.map(({ corner, name, className }) => <button key={name} className={`resize-handle ${className}`} type="button" aria-label={`Resize from ${name} corner`} onPointerDown={(event) => onResizePointerDown(event, corner)} onPointerMove={onResizePointerMove} onPointerUp={finishResize} onPointerCancel={cancelResize} />)}</div>}</div></div></section>
-        <aside className={`properties-panel ${selected?.type === "text" ? "text-properties-panel" : ""}`}><div className="panel-heading"><h2>{selected?.type === "text" ? "Edit text" : "Properties"}</h2></div>{selected ? <div className="properties-content"><p className="selected-kind">{selected.type === "text" ? "Text" : selected.type === "image" ? "Image" : "Rectangle"}</p>{selected.type === "text" ? <><label className="field-label" htmlFor="selected-text">Label text</label><textarea ref={textAreaRef} id="selected-text" placeholder="Type your label text…" value={textDraft} onChange={(event) => { textDraftRef.current = event.target.value; setTextDraft(event.target.value); }} onBlur={editText} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") editText(); }} /><p className="control-help">Text wraps live to the box width. Press Return for a new line.</p>{hasUnappliedTextDraft && <p className="draft-warning" role="status">Preview updated. Apply text before printing.</p>}<button className="button button-primary full-width" type="button" onClick={editText}>Done</button></> : selected.type === "image" ? <><p className="empty-copy">Drag to move. Drag a corner handle to scale. The selected frame stays inside the printable label.</p><div className="image-controls"><span className="field-label">Current framing</span><p className="image-setting-summary">{selected.fit === "cover" ? "Fills label with centered crop" : "Shows the whole image"} · {selected.rotation ?? 0}°</p><div className="property-button-row"><button className="button" type="button" onClick={() => frameImage("contain")}>Fit whole</button><button className="button" type="button" onClick={() => frameImage("cover")}>Fill label</button><button className="button button-quiet" type="button" onClick={() => rotateImage(-1)}>Rotate left</button><button className="button button-quiet" type="button" onClick={() => rotateImage(1)}>Rotate right</button></div></div></> : <p className="empty-copy">Drag the rectangle on the canvas to reposition it.</p>}<div className="property-position"><span>Position</span><strong>{Math.round(selected.x)}, {Math.round(selected.y)}</strong></div></div> : <p className="empty-copy">Select a layer to edit its properties.</p>}{selected && <details className="mobile-secondary-details"><summary>More actions <span className="details-chevron" aria-hidden="true">⌄</span></summary><div className="mobile-secondary-action-row"><button className="button button-quiet" type="button" onClick={copySelected}>Copy</button><button className="button button-quiet" type="button" onClick={pasteSelected} disabled={!copiedId && !selectedId}>Paste</button><button className="button button-quiet" type="button" onClick={() => duplicate(selectedId)}>Duplicate</button><button className="button button-danger" type="button" onClick={removeSelected}>Delete</button></div></details>}</aside>
+      <input className="visually-hidden" hidden ref={fileInputRef} type="file" accept="image/*,.pdf,application/pdf" multiple onChange={(event) => { const files = Array.from(event.target.files ?? []); event.currentTarget.value = ""; if (files.length > 0) void addFiles(files); }} aria-label="Import artwork file" />
+      {activePanel && <><button className="flyout-backdrop" type="button" aria-label="Close workspace panel" onClick={() => { editText(); setActivePanel(null); }} /><aside className="workspace-flyout" ref={flyoutRef} role="dialog" aria-modal="true" aria-label={`${activePanel} panel`}>
+        <div className="flyout-topline"><strong>{activePanel === "edit" ? "Edit" : activePanel === "layers" ? "Layers" : activePanel === "uploads" ? "Uploads" : "Printer"}</strong><button className="button button-quiet" type="button" onClick={() => { editText(); setActivePanel(null); }} data-flyout-autofocus aria-label="Close panel">Close</button></div>
+        <nav className="flyout-tabs" aria-label="Workspace panels">{(["edit", "layers", "uploads", "printer"] as FlyoutPanel[]).map((panel) => <button key={panel} className={activePanel === panel ? "active" : ""} type="button" aria-current={activePanel === panel ? "page" : undefined} onClick={() => { editText(); setActivePanel(panel); }}>{panel[0].toUpperCase() + panel.slice(1)}</button>)}</nav>
+        <div className="flyout-history-actions" aria-label="History"><button className="button button-quiet" type="button" onClick={() => travelHistory("undo")} disabled={!workspace.canUndo}>Undo</button><button className="button button-quiet" type="button" onClick={() => travelHistory("redo")} disabled={!workspace.canRedo}>Redo</button></div>
+        {activePanel === "edit" && <div className="flyout-content"><div className="flyout-section-heading"><span>{selected ? `${selected.type[0].toUpperCase()}${selected.type.slice(1)} selected` : "No selection"}</span></div>{selected ? <div className={`properties-content ${selected.type === "text" ? "text-properties-panel" : ""}`}>{selected.type === "text" ? <><label className="field-label" htmlFor="selected-text">Label text</label><textarea ref={textAreaRef} id="selected-text" placeholder="Type your label text…" value={textDraft} onChange={(event) => { textDraftRef.current = event.target.value; setTextDraft(event.target.value); }} onBlur={editText} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") finishTextEdit(); }} /><p className="control-help">Text wraps live. Press Return for a new line.</p><p className="draft-warning" role="status" style={{ visibility: hasUnappliedTextDraft ? "visible" : "hidden" }}>Preview updated. Done commits before printing.</p><button className="button button-primary full-width" type="button" onClick={finishTextEdit}>Done</button></> : selected.type === "image" ? <><p className="empty-copy">Drag to move. Drag a corner handle to scale.</p><div className="image-controls"><span className="field-label">Framing</span><p className="image-setting-summary">{selected.fit === "cover" ? "Fills label with centered crop" : "Shows the whole image"} · {selected.rotation ?? 0}°</p><div className="property-button-row"><button className="button" type="button" onClick={() => frameImage("contain")}>Fit whole</button><button className="button" type="button" onClick={() => frameImage("cover")}>Fill label</button><button className="button button-quiet" type="button" onClick={() => rotateImage(-1)}>Rotate left</button><button className="button button-quiet" type="button" onClick={() => rotateImage(1)}>Rotate right</button></div></div></> : <p className="empty-copy">Drag the rectangle on the label to reposition it.</p>}<div className="mobile-secondary-action-row"><button className="button button-quiet" type="button" onClick={copySelected}>Copy</button><button className="button button-quiet" type="button" onClick={pasteSelected} disabled={!copiedId && !selectedId}>Paste</button><button className="button button-quiet" type="button" onClick={() => duplicate(selectedId)}>Duplicate</button><button className="button button-danger" type="button" onClick={removeSelected}>Delete</button></div></div> : <p className="empty-copy">Add text or import artwork from the bottom bar.</p>}</div>}
+        {activePanel === "layers" && <div className="flyout-content"><div className="layer-list">{elements.map((element, index) => <button className={`layer-row ${selectedId === element.id ? "selected" : ""}`} aria-pressed={selectedId === element.id} type="button" key={element.id} onClick={() => { editText(); setSelectedId(element.id); setActivePanel("edit"); }}><span className="layer-number">{String(index + 1).padStart(2, "0")}</span><span className="layer-label">{element.type === "text" ? element.text || "Empty text" : element.type === "image" ? element.alt || "Image" : "Rectangle"}</span><span className="layer-kind">{element.type}</span></button>)}</div>{elements.length === 0 && <p className="empty-copy">Add text or import artwork from the bottom bar.</p>}</div>}
+        {activePanel === "uploads" && <div className="flyout-content">{artworkHistory.length > 0 ? <div className="history-carousel">{artworkHistory.map((item) => <button className="history-card" type="button" key={item.id} onClick={() => { void addFromHistory(item); setActivePanel("edit"); }} disabled={historyLoadingId !== null}>{item.mimeType.startsWith("image/") ? <img src={item.sourceUrl} alt="" loading="lazy" decoding="async" /> : <span className="history-pdf" aria-hidden="true">PDF</span>}<span className="history-name">{item.name}</span>{historyLoadingId === item.id && <span className="history-loading">Loading…</span>}</button>)}</div> : <p className="empty-copy">Your next uploaded image or PDF will appear here.</p>}<button className="button button-primary full-width" type="button" onClick={() => fileInputRef.current?.click()}>Import artwork</button></div>}
+        {activePanel === "printer" && <div className="flyout-content"><div className="printer-detail-card"><span className={`printer-indicator ${printer?.ready ? "ready" : ""}`} aria-hidden="true" /><strong>{printer?.ready ? "Printer ready" : printer ? "Printer unavailable" : "Connecting to printer…"}</strong><p>{printer?.detail ?? "Checking the Pi print node."}</p></div><button className="button button-quiet full-width" type="button" onClick={() => { void refreshPrinter(); }} disabled={checkingPrinter || isPrinting}>{checkingPrinter ? "Checking…" : "Refresh status"}</button><p className="control-help">Print submits one guarded label only after the text and bounds checks pass.</p></div>}
+      </aside></>}
+      <section className="editor-layout">
+        <section className="canvas-column"><div className="workspace-bottom-bar" aria-label="Quick label actions"><button className="workspace-bottom-button workspace-bottom-primary" type="button" onClick={addText}>Text</button><button className="workspace-bottom-button" type="button" onClick={() => fileInputRef.current?.click()}>Import</button><button className="workspace-bottom-button" type="button" onClick={() => travelHistory("undo")} disabled={!workspace.canUndo}>Undo</button><button className="workspace-bottom-button" type="button" onClick={() => setActivePanel("edit")} disabled={!selected}>Controls</button></div><div className={`canvas-stage ${isDropTarget ? "drop-target" : ""}`} onDragEnter={(event) => { event.preventDefault(); setIsDropTarget(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setIsDropTarget(false)} onDrop={handleDrop}>{isDropTarget && <div className="drop-overlay">Drop image or PDF</div>}<div ref={paperRef} className="paper-frame" style={{ aspectRatio: `${width} / ${height}` }} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}><div className="paper-svg" dangerouslySetInnerHTML={{ __html: previewArtifact.source }} />{imageSelection && <div className="image-selection" style={selectionStyle} aria-label="Selected image frame">{RESIZE_CORNERS.map(({ corner, name, className }) => <button key={name} className={`resize-handle ${className}`} type="button" aria-label={`Resize from ${name} corner`} onPointerDown={(event) => onResizePointerDown(event, corner)} onPointerMove={onResizePointerMove} onPointerUp={finishResize} onPointerCancel={cancelResize} />)}</div>}</div></div></section>
       </section>
     </main>
   );

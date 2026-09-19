@@ -1,5 +1,13 @@
 # Phone editor review
 
+## Content-first follow-up
+
+The workspace now has a single 48px header, a viewport-fitted label, and a floating four-button action bar. Editing, layers, uploads, and printer details live in a dismissible flyout; the duplicate title and always-visible printer strip are gone. Text entry opens directly with focus, and closing the panel saves the draft and returns focus to its opener.
+
+![Content-first phone workspace](content-first.png)
+
+Reviewed at 320×568, 390×700, 430×844, 700×360, 390×380, and 1280×800: no horizontal overflow, preserved label proportions, and no overlap between the label and floating controls. The screenshot uses a local printer fixture; physical phone keyboard and actual printing remain separate acceptance checks.
+
 The phone layout puts a focused text field and common actions beside the label preview. Text wraps using browser font measurements, preserves blank lines, and saves when leaving the field. Secondary item actions, layers, and upload history use disclosures.
 
 ## Screenshots
