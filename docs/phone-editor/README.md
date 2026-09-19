@@ -21,6 +21,6 @@ All captures use a 390 × 844 browser viewport. The before capture is the existi
 - No horizontal document overflow at 320, 390, 430, 768, or 1280 pixels.
 - An intercepted local print request produced a bitmap and displayed the simulated acceptance receipt. The route was local and intercepted; no physical printer received a request.
 
-The Pi update requires its existing password-based SSH login. A deployment helper is prepared in the parent task directory; it backs up the current static files before installation. A real phone keyboard and physical output remain human acceptance checks.
+Deployed to https://pizero.tail8797e7.ts.net/ on 2026-09-19 from code commit `ff2ff60`. All seven served files matched the production build by SHA-256. The live 390px browser verified focused text entry, wrapping, blank-line spacing, no horizontal overflow, printer readiness, and zero console errors. The previous static files are backed up on the Pi. A real phone keyboard and physical output remain human acceptance checks.
 
 Source checks: 106 tests, TypeScript checks, full production build, and `git diff --check` passed.
