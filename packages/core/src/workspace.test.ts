@@ -54,6 +54,19 @@ describe("LabelWorkspace", () => {
     }).toThrow();
   });
 
+  it("round-trips text spacing fields through add and update commands", () => {
+    const workspace = createLabelWorkspace();
+    workspace.execute({ type: "create-document", documentId: "metrics", name: "Metrics", size: { width: 200, height: 200 } });
+    workspace.execute({
+      type: "add-text",
+      documentId: "metrics",
+      element: { id: "copy", width: 160, height: 80, text: "Hello", lineHeight: 1.4, letterSpacing: 0.5 },
+    });
+    expect(workspace.getDocument("metrics")?.elements[0]).toMatchObject({ lineHeight: 1.4, letterSpacing: 0.5 });
+    workspace.execute({ type: "update-text", documentId: "metrics", elementId: "copy", updates: { lineHeight: 1.6, letterSpacing: -0.25 } });
+    expect(workspace.getDocument("metrics")?.elements[0]).toMatchObject({ lineHeight: 1.6, letterSpacing: -0.25 });
+  });
+
   it("rejects duplicate ids, unknown references, and invalid sizes", () => {
     const workspace = createLabelWorkspace();
     workspace.execute({ type: "create-document", documentId: "label", name: "Label", size: { width: 100, height: 100 } });

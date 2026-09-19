@@ -34,6 +34,16 @@ describe("editor history", () => {
     expect(session.canRedo).toBe(true);
   });
 
+  it("does not create a second undo step for an identical text commit", () => {
+    const session = createEditorSession(initialDocument);
+    session.execute({ type: "add-text", documentId: initialDocument.id, elementId: "text", text: "" });
+    session.execute({ type: "update-text", documentId: initialDocument.id, elementId: "text", text: "First line" });
+    session.execute({ type: "update-text", documentId: initialDocument.id, elementId: "text", text: "First line" });
+
+    expect(session.undo().elements[0]).toMatchObject({ text: "" });
+    expect(session.redo().elements[0]).toMatchObject({ text: "First line" });
+  });
+
   it("bounds retained edits", () => {
     const session = createEditorSession(initialDocument);
     for (let i = 0; i < 50; i++) session.execute({ type: "rename-document", documentId: initialDocument.id, name: `Label ${i}` });

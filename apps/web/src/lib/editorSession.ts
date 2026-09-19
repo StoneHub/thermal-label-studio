@@ -19,6 +19,12 @@ export function createEditorSession(initial: LabelDocument) {
       const before = current();
       const next = createLabelWorkspace([before]);
       for (const command of Array.isArray(commands) ? commands : [commands]) next.execute(command);
+      const after = next.getDocument(initial.id)!;
+      const contentChanged = before.name !== after.name
+        || before.size.width !== after.size.width
+        || before.size.height !== after.size.height
+        || JSON.stringify(before.elements) !== JSON.stringify(after.elements);
+      if (!contentChanged) return before;
       past.push(before);
       if (past.length > 40) past.shift();
       future.length = 0;
