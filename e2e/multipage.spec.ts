@@ -91,7 +91,6 @@ test('mobile carousel, fill default, selected print and duplicate guard', async 
   await expect(page.getByText('Page 2 of 3', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Previous page preview', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Next page preview', exact: true })).toBeVisible();
-  await screenshot(page, 'middle-page');
   mock.hold();
   await page.getByRole('button', { name: 'Print this page', exact: true }).click();
   await expect.poll(() => mock.submissions.length).toBe(1);
@@ -106,6 +105,7 @@ test('mobile carousel, fill default, selected print and duplicate guard', async 
   expect(mock.submissions[0].maxAttempts).toBe(1);
   mock.release();
   await expect(page.getByText('1 label(s) accepted by the print node.', { exact: false })).toBeVisible();
+  await screenshot(page, 'middle-page');
   await page.getByRole('button', { name: 'Previous', exact: true }).click();
   await page.getByRole('button', { name: 'Print this page', exact: true }).click();
   await expect.poll(() => mock.submissions.length).toBe(2);
