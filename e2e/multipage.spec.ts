@@ -25,12 +25,19 @@ function labelsPdf(): Buffer {
   return Buffer.from(source);
 }
 
+test.afterEach(async ({ page }, info) => {
+  if (info.status !== info.expectedStatus) console.log('SYNTHETIC_FAILURE_DOM', (await page.locator('body').innerText()).slice(0, 12000));
+});
+
 async function setup(page: Page) {
+  page.on('pageerror', error => console.log('BROWSER_ERROR', error.message));
+  page.on('console', message => { if (message.type() === 'error') console.log('BROWSER_CONSOLE', message.text()); });
   const submissions: any[] = [];
   const unexpected: string[] = [];
   let release: (() => void) | undefined;
   let hold = false;
   let rejectAt = 0;
+  let disconnectAt = 0;
   await page.route('**/*', async route => {
     const url = new URL(route.request().url());
     if (url.origin !== 'http://127.0.0.1:5173') {
@@ -44,6 +51,7 @@ async function setup(page: Page) {
       const intent = route.request().postDataJSON();
       submissions.push(intent);
       if (hold) await new Promise<void>(resolve => { release = resolve; });
+      if (disconnectAt === submissions.length) { await route.abort(); return; }
       const rejected = rejectAt === submissions.length;
       await route.fulfill({ status: rejected ? 503 : 200, json: { taskId: intent.taskId, accepted: !rejected, state: rejected ? 'rejected' : 'accepted', detail: rejected ? 'Synthetic failure' : 'Synthetic acceptance' } });
     } else if (url.pathname.startsWith('/api/')) {
@@ -53,7 +61,7 @@ async function setup(page: Page) {
   await page.goto('/');
   await page.getByLabel('Import artwork file').setInputFiles({ name: 'synthetic-labels.pdf', mimeType: 'application/pdf', buffer: labelsPdf() });
   await expect(page.getByText('Page 1 of 3', { exact: true })).toBeVisible();
-  return { submissions, unexpected, hold: () => { hold = true; }, release: () => { hold = false; release?.(); }, rejectSecond: () => { rejectAt = 2; } };
+  return { submissions, unexpected, hold: () => { hold = true; }, release: () => { hold = false; release?.(); }, rejectSecond: () => { rejectAt = 2; }, disconnectSecond: () => { disconnectAt = 2; } };
 }
 
 async function screenshot(page: Page, name: string) {
@@ -82,7 +90,9 @@ test('mobile carousel, fill default, selected print and duplicate guard', async 
   await expect(page.getByRole('button', { name: 'Printing…', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Printing…', exact: true }).evaluate((button: HTMLButtonElement) => button.click());
   await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
+  const artworkBeforeUndo = await page.locator('.paper-svg').innerHTML();
   await page.keyboard.press('Control+z');
+  expect(await page.locator('.paper-svg').innerHTML()).toBe(artworkBeforeUndo);
   await expect(page.getByText('Page 2 of 3', { exact: true })).toBeVisible();
   expect(mock.submissions).toHaveLength(1);
   expect(mock.submissions[0].maxAttempts).toBe(1);
@@ -115,12 +125,12 @@ test('cancel all sends nothing; accepted all is ordered and one attempt per page
   expect(mock.unexpected).toEqual([]);
 });
 
-test('batch stops after uncertain second receipt without retrying or sending third', async ({ page }) => {
+for (const disconnect of [false, true]) test(`batch stops after ${disconnect ? 'lost connection' : 'rejected receipt'} without retrying or sending third`, async ({ page }) => {
   const mock = await setup(page);
-  mock.rejectSecond();
+  if (disconnect) mock.disconnectSecond(); else mock.rejectSecond();
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Print all 3 pages…' }).click();
-  await expect(page.getByText(/Synthetic failure/)).toBeVisible();
+  await expect(page.getByText(disconnect ? /connection was lost/ : /Synthetic failure/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Print this page', exact: true })).toBeEnabled();
   expect(mock.submissions).toHaveLength(2);
   expect(mock.unexpected).toEqual([]);
