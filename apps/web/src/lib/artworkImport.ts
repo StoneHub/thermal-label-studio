@@ -16,6 +16,9 @@ export interface ImportedArtwork {
   width: number;
   height: number;
   sourceKind: ArtworkSourceKind;
+  /** One-based page position for PDF artwork. */
+  pageNumber?: number;
+  pageCount?: number;
 }
 
 export interface ArtworkSize {
@@ -54,6 +57,12 @@ const PDF_EXTENSIONS = new Set(["pdf"]);
 
 const FILE_ACCEPT_HINT = "PNG, JPEG, WebP, GIF, SVG, or PDF";
 const MAX_RASTER_DIMENSION = 4096;
+// Render sequentially and cap both decoded pixels and retained PNG strings.
+// A page count alone does not bound memory for large or noisy PDF pages.
+const MAX_PDF_PAGES = 50;
+const MAX_PDF_FILE_BYTES = 32 * 1024 * 1024;
+const MAX_PDF_RASTER_PIXELS = 64_000_000;
+const MAX_PDF_DATA_URL_CHARS = 64 * 1024 * 1024;
 
 /**
  * Classify a file using its MIME type first, then its extension. Clipboard
@@ -153,6 +162,8 @@ const createRasterCanvas = (width: number, height: number): HTMLCanvasElement =>
   canvas.width = width;
   canvas.height = height;
   if (!canvas.getContext("2d")) {
+    canvas.width = 0;
+    canvas.height = 0;
     throw new Error("This browser could not create a 2D canvas for artwork import.");
   }
 
@@ -236,9 +247,14 @@ const rasterizeImage = async (file: File): Promise<Pick<ImportedArtwork, "dataUr
   return { dataUrl: canvasDataUrl(canvas), width: rasterWidth, height: rasterHeight };
 };
 
-const rasterizePdfPage = async (
-  file: File
-): Promise<Pick<ImportedArtwork, "dataUrl" | "width" | "height">> => {
+const rasterizePdfPages = async (
+  file: File,
+  firstPageOnly: boolean
+): Promise<ImportedArtwork[]> => {
+  if (file.size > MAX_PDF_FILE_BYTES) {
+    throw new Error("The PDF exceeds the 32 MiB file-size limit. Split or reduce the PDF and try again.");
+  }
+
   // Keep the worker import next to the PDF import. It avoids loading PDF.js
   // for image-only sessions and lets Vite turn the worker into an asset URL.
   const [pdfjs, workerModule] = await Promise.all([
@@ -254,31 +270,87 @@ const rasterizePdfPage = async (
   try {
     loadingTask = pdfjs.getDocument({ data: bytes });
     documentProxy = await loadingTask.promise;
-    if (documentProxy.numPages < 1) {
+    if (!Number.isSafeInteger(documentProxy.numPages) || documentProxy.numPages < 1) {
       throw new Error("The PDF does not contain a page to import.");
     }
+    if (!firstPageOnly && documentProxy.numPages > MAX_PDF_PAGES) {
+      throw new Error(`The PDF contains ${documentProxy.numPages} pages; the import limit is ${MAX_PDF_PAGES}. Split the PDF and try again.`);
+    }
 
-    const page = await documentProxy.getPage(1);
-    const baseViewport = page.getViewport({ scale: 1 });
-    const maxDimension = Math.max(baseViewport.width, baseViewport.height);
-    const scale = Math.min(2, 4096 / maxDimension);
-    const viewport = page.getViewport({ scale });
-    const width = Math.max(1, Math.ceil(viewport.width));
-    const height = Math.max(1, Math.ceil(viewport.height));
-    const canvas = createRasterCanvas(width, height);
-    await page.render({ canvas, viewport }).promise;
-    return { dataUrl: canvasDataUrl(canvas), width, height };
+    const artwork: ImportedArtwork[] = [];
+    const pageCount = documentProxy.numPages;
+    const pagesToImport = firstPageOnly ? 1 : pageCount;
+    const filename = file.name.trim() || "Pasted image";
+    let totalPixels = 0;
+    let totalDataUrlChars = 0;
+
+    for (let pageNumber = 1; pageNumber <= pagesToImport; pageNumber += 1) {
+      const page = await documentProxy.getPage(pageNumber);
+      let canvas: HTMLCanvasElement | undefined;
+      try {
+        const baseViewport = page.getViewport({ scale: 1 });
+        requireSize(baseViewport, "PDF page");
+        const maxDimension = Math.max(baseViewport.width, baseViewport.height);
+        const scale = Math.min(2, MAX_RASTER_DIMENSION / maxDimension);
+        const viewport = page.getViewport({ scale });
+        requireSize(viewport, "PDF page");
+        const width = Math.max(1, Math.ceil(viewport.width));
+        const height = Math.max(1, Math.ceil(viewport.height));
+        totalPixels += width * height;
+        if (totalPixels > MAX_PDF_RASTER_PIXELS) {
+          throw new Error("The PDF exceeds the 64-megapixel raster memory limit. Split the PDF and try again.");
+        }
+
+        canvas = createRasterCanvas(width, height);
+        await page.render({ canvas, viewport }).promise;
+        const dataUrl = canvasDataUrl(canvas);
+        totalDataUrlChars += dataUrl.length;
+        if (totalDataUrlChars > MAX_PDF_DATA_URL_CHARS) {
+          throw new Error("The PDF exceeds the raster data memory limit. Split or simplify the PDF and try again.");
+        }
+        artwork.push({
+          name: !firstPageOnly && pageCount > 1 ? `${filename} — page ${pageNumber}` : filename,
+          dataUrl,
+          width,
+          height,
+          sourceKind: "pdf-page",
+          pageNumber,
+          pageCount,
+        });
+      } finally {
+        // Release each backing buffer before allocating the next page's canvas.
+        if (canvas) {
+          canvas.width = 0;
+          canvas.height = 0;
+        }
+        try {
+          page.cleanup();
+        } catch {
+          // Document destruction below also releases PDF.js page resources.
+        }
+      }
+    }
+    return artwork;
   } catch (error) {
-    if (error instanceof Error && error.message.includes("does not contain a page")) throw error;
+    if (error instanceof Error && error.message.startsWith("The PDF")) throw error;
     const detail = error instanceof Error ? ` ${error.message}` : "";
     throw new Error(`The PDF could not be rendered.${detail}`);
   } finally {
-    await documentProxy?.cleanup();
-    await loadingTask?.destroy();
+    try {
+      await documentProxy?.cleanup();
+    } catch {
+      // Cleanup can fail after a render error; still destroy the worker below.
+    } finally {
+      try {
+        await loadingTask?.destroy();
+      } catch {
+        // A teardown failure must not replace the original import error.
+      }
+    }
   }
 };
 
-export const importArtwork = async (file: File): Promise<ImportedArtwork> => {
+const importArtworkFile = async (file: File, firstPageOnly: boolean): Promise<ImportedArtwork[]> => {
   if (!file || file.size <= 0) {
     throw new Error("That file is empty.");
   }
@@ -290,12 +362,13 @@ export const importArtwork = async (file: File): Promise<ImportedArtwork> => {
   }
 
   try {
-    const raster = fileKind === "pdf" ? await rasterizePdfPage(file) : await rasterizeImage(file);
-    return {
+    if (fileKind === "pdf") return await rasterizePdfPages(file, firstPageOnly);
+    const raster = await rasterizeImage(file);
+    return [{
       name: file.name.trim() || "Pasted image",
       ...raster,
-      sourceKind: fileKind === "pdf" ? "pdf-page" : "image",
-    };
+      sourceKind: "image",
+    }];
   } catch (error) {
     if (error instanceof Error && (error.message.startsWith("The PDF") || error.message.startsWith("The image"))) {
       throw error;
@@ -304,3 +377,14 @@ export const importArtwork = async (file: File): Promise<ImportedArtwork> => {
     throw new Error(`"${file.name || "That file"}" could not be opened.${detail}`);
   }
 };
+
+/**
+ * Import an image or every PDF page in document order. PDF imports are atomic:
+ * an unreadable page or resource limit rejects the entire import, not a subset.
+ */
+export const importArtworkPages = (file: File): Promise<ImportedArtwork[]> =>
+  importArtworkFile(file, false);
+
+/** Compatibility API: PDFs import only their first page. */
+export const importArtwork = async (file: File): Promise<ImportedArtwork> =>
+  (await importArtworkFile(file, true))[0];

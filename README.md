@@ -63,3 +63,22 @@ pnpm test
 ## License
 
 MIT. See [LICENSE](./LICENSE).
+
+### Multi-page PDF labels
+
+Importing a PDF creates one editable label per page, in PDF order. Use Previous,
+Next, or the neighboring-page previews to select a page; the page controls also
+support a horizontal swipe. Edits and undo history stay with each page. Importing
+another PDF appends its pages, preserving work already in the workspace (an empty
+initial placeholder is replaced).
+
+**Print this page** is the default action. **Print all pages…** is an explicit,
+confirmed action that prepares all pages before sending one guarded PrintIntent
+per page in order. A rejected or uncertain result stops the sequence without
+retrying; the message reports earlier accepted labels and the page where it
+stopped. Inspect the printer before reprinting a possibly accepted page.
+
+Imported artwork defaults to **Fill label** (centered crop); **Fit whole** remains
+available in Controls when the entire source must be visible. Review borders,
+barcodes, and addresses before printing. Imports allow at most 50 PDF pages,
+32 MiB source size, and bounded raster memory; split larger documents first.
