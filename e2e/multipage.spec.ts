@@ -31,7 +31,7 @@ test.afterEach(async ({ page }, info) => {
 
 async function setup(page: Page) {
   page.on('pageerror', error => console.log('BROWSER_ERROR', error.message));
-  page.on('console', message => { if (message.type() === 'error') console.log('BROWSER_CONSOLE', message.text()); });
+  page.on('console', message => { if (message.type() === 'error' || message.text().startsWith('IMPORT_STATUS')) console.log('BROWSER_CONSOLE', message.text()); });
   const submissions: any[] = [];
   const unexpected: string[] = [];
   let release: (() => void) | undefined;
@@ -59,6 +59,14 @@ async function setup(page: Page) {
     } else await route.continue();
   });
   await page.goto('/');
+  await page.evaluate(() => {
+    let previous = '';
+    new MutationObserver(() => {
+      const status = document.querySelector('.status-message')?.textContent ?? '';
+      if (status && status !== previous) console.log('IMPORT_STATUS', status);
+      previous = status;
+    }).observe(document.body, { subtree: true, childList: true, characterData: true });
+  });
   await page.getByLabel('Import artwork file').setInputFiles({ name: 'synthetic-labels.pdf', mimeType: 'application/pdf', buffer: labelsPdf() });
   await expect(page.getByText('Page 1 of 3', { exact: true })).toBeVisible();
   return { submissions, unexpected, hold: () => { hold = true; }, release: () => { hold = false; release?.(); }, rejectSecond: () => { rejectAt = 2; }, disconnectSecond: () => { disconnectAt = 2; } };
