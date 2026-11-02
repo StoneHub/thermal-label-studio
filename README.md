@@ -63,3 +63,38 @@ pnpm test
 ## License
 
 MIT. See [LICENSE](./LICENSE).
+
+### Multi-page PDF labels
+
+Importing a PDF creates one editable label per page, in PDF order. Use Previous,
+Next, or the neighboring-page previews to select a page; the page controls also
+support a horizontal swipe. Edits and undo history stay with each page. Importing
+another PDF appends its pages, preserving work already in the workspace (an empty
+initial placeholder is replaced).
+
+**Print this page** is the default action. **Print all pages…** is an explicit,
+confirmed action that prepares all pages before sending one guarded PrintIntent
+per page in order. A rejected or uncertain result stops the sequence without
+retrying; the message reports earlier accepted labels and the page where it
+stopped. Inspect the printer before reprinting a possibly accepted page.
+
+Imported artwork defaults to **Fill label** (centered crop); **Fit whole** remains
+available in Controls when the entire source must be visible. Review borders,
+barcodes, and addresses before printing. Imports allow at most 50 PDF pages,
+32 MiB source size, and bounded raster memory; split larger documents first.
+
+### Mobile browser regression checks
+
+`pnpm exec playwright install chromium` then `pnpm exec playwright test` runs the
+synthetic three-page PDF flows on a phone-sized Chromium viewport. All print-node
+requests are mocked and all non-local requests are blocked; no physical printer
+or user documents are used. Tests cover page peeks/navigation, Fill label,
+selected-page printing, cancel/all, duplicate guards, and stopping a failed batch.
+
+The scoped PR workflow uses only a standard public-repository GitHub runner and
+skips private repositories. It does not create caches or uploaded artifacts.
+Two bounded synthetic PNG screenshots are retained in workflow logs between
+`SYNTHETIC_PNG_BEGIN/END` markers; concatenate the `SYNTHETIC_PNG_DATA` payloads
+and base64-decode to review them. Logs avoid unverified artifact-storage spending.
+If this repository becomes private, verify billing safeguards before changing
+that guard. Browser mocks prove TransportReceipt handling, not physical printing.

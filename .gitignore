@@ -25,3 +25,7 @@ pnpm-debug.log*
 .vscode/
 .idea/
 .playwright-cli/
+
+# browser QA output
+test-results/
+playwright-report/

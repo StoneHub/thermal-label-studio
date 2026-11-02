@@ -45,6 +45,7 @@ export async function listArtworkHistory(fetcher: Fetcher = fetch): Promise<Artw
 export async function saveArtworkSource(file: File, fetcher: Fetcher = fetch): Promise<ArtworkHistoryItem> {
   const response = await fetcher("/api/artwork", {
     method: "POST",
+    signal: AbortSignal.timeout(15000),
     body: file,
     headers: {
       "content-type": file.type,

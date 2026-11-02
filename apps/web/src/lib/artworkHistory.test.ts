@@ -43,6 +43,17 @@ describe("artwork history", () => {
     }));
   });
 
+  it("bounds optional original-save requests with an abort signal", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    const request = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      throw new DOMException("Timed out", "TimeoutError");
+    });
+    await expect(saveArtworkSource(new File(["data"], "label.pdf", { type: "application/pdf" }), request)).rejects.toThrow("Timed out");
+    expect(timeout).toHaveBeenCalledWith(15000);
+    timeout.mockRestore();
+  });
+
   it("loads a saved source as a file for re-editing", async () => {
     const request = vi.fn(async () => new Response("original", {
       status: 200,
