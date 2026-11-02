@@ -42,8 +42,8 @@ button:disabled { cursor: default; opacity: .45; }
 .full-width { width: 100%; margin-top: 10px; }
 
 .visually-hidden { position: fixed; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-.status-message { position: absolute; z-index: 3; top: 56px; left: 12px; max-width: min(420px, calc(100% - 24px)); padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); background: rgba(255,253,250,.96); box-shadow: 0 8px 24px rgba(29,43,49,.08); font-size: 12px; }
-.workspace-alerts { position: absolute; z-index: 5; top: 56px; right: 12px; display: grid; gap: 6px; width: min(470px, calc(100% - 24px)); }
+.status-message { position: absolute; z-index: 3; bottom: 78px; pointer-events: none; left: 12px; max-width: min(420px, calc(100% - 24px)); padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); background: rgba(255,253,250,.96); box-shadow: 0 8px 24px rgba(29,43,49,.08); font-size: 12px; }
+.workspace-alerts { position: relative; flex: 0 0 auto; z-index: 3; display: grid; gap: 6px; margin: 8px 12px 0; }
 .print-feedback { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 11px; border: 1px solid #e5c7ba; border-radius: 7px; color: var(--ink); background: rgba(247,233,226,.97); font-size: 12px; line-height: 1.35; }
 .print-feedback .button { flex: 0 0 auto; min-height: 32px; padding: 5px 8px; }
 
@@ -130,3 +130,18 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   .workspace-flyout { width: 390px; }
   .canvas-stage { padding-bottom: 78px; }
 }
+
+/* The active page remains editable; adjacent labels peek into the viewport. */
+.page-navigation { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 12px; padding: 8px 16px; align-items: center; text-align: center; background: #fff; border-bottom: 1px solid var(--line); z-index: 2; }
+.page-navigation span { font-weight: 650; font-size: 13px; }
+.page-navigation .print-all { grid-column: 1 / -1; justify-self: center; font-size: 12px; padding: 4px 12px; min-height: 28px; }
+.canvas-stage.has-pages { --label-width: min(calc(100vw - 80px), calc((100dvh - 236px) * 2 / 3)); overflow: hidden; }
+.has-pages .paper-frame { width: var(--label-width); flex: 0 0 var(--label-width); }
+.page-peek { position: absolute; top: calc(50% - 34px); transform: translateY(-50%); width: var(--label-width); aspect-ratio: 2 / 3; padding: 0; border: 0; overflow: hidden; background: #fff; box-shadow: 0 5px 25px #1d2b3122; opacity: .65; cursor: pointer; }
+.page-peek svg { display: block; width: 100%; height: 100%; }
+.page-peek span { display: block; width: 100%; height: 100%; pointer-events: none; }
+.page-peek-left { right: calc(50% + var(--label-width) / 2 + 12px); }
+.page-peek-right { left: calc(50% + var(--label-width) / 2 + 12px); }
+.import-progress { position: fixed; inset: 0; z-index: 100; background: #ffffffdd; display: grid; place-items: center; font-size: 18px; font-weight: 650; }
+
+.page-navigation { touch-action: pan-y; }

@@ -11,7 +11,9 @@ import {
   type WorkspaceCommand,
 } from "@tls/core";
 import type { LabelTextMeasure } from "@tls/core";
-import { fitArtworkWithin, importArtwork } from "./lib/artworkImport";
+import { importArtworkPages } from "./lib/artworkImport";
+import { documentFromArtwork } from "./lib/documentPages";
+import { submitPrintBatch } from "./lib/printBatch";
 import {
   listArtworkHistory,
   loadArtworkSource,
@@ -67,7 +69,14 @@ const textHeightFor = (element: LabelTextElement, text: string): number => {
 };
 
 const App: React.FC = () => {
-  const workspace = useMemo(() => createEditorSession(initialDocument), []);
+  const [pageSessions, setPageSessions] = useState(() => [createEditorSession(initialDocument)]);
+  const pagesRef = useRef(pageSessions);
+  const [pageIndex, setPageIndex] = useState(0);
+  const pageIndexRef = useRef(0);
+  const pageSwipeStart = useRef<{ x: number; y: number } | null>(null);
+  const workspace = pageSessions[pageIndex];
+  const importingRef = useRef(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [document, setDocument] = useState<LabelDocument>(workspace.current);
   const [artifact, setArtifact] = useState<RenderArtifact>(() => renderLabelDocument(initialDocument, { measureText: browserTextMeasure }));
   const [printer, setPrinter] = useState<PrinterStatus | null>(null);
@@ -132,6 +141,7 @@ const App: React.FC = () => {
     || (selected?.type === "text" && selected.y + selectedDraftHeight > document.size.height);
   const printBlocked = hasUnappliedTextDraft || textOverflowsLabel;
   const apply = useCallback((next: WorkspaceCommand | readonly WorkspaceCommand[]) => {
+    if (importingRef.current || printingRef.current) return undefined;
     try {
       const nextDocument = workspace.execute(next);
       setDocument(nextDocument);
@@ -144,6 +154,7 @@ const App: React.FC = () => {
   }, [showStatus, workspace]);
 
   const travelHistory = useCallback((direction: "undo" | "redo") => {
+    if (importingRef.current || printingRef.current) return;
     const next = workspace[direction]();
     setDocument(next);
     setArtifact(renderLabelDocument(next, { measureText: browserTextMeasure }));
@@ -205,42 +216,65 @@ const App: React.FC = () => {
   }, [apply, document.id, showStatus]);
 
   const addArtwork = useCallback(async (file: File, saveOriginal = true): Promise<boolean> => {
+    if (importingRef.current || printingRef.current) return false;
+    importingRef.current = true;
+    setIsImporting(true);
     try {
-      const imported = await importArtwork(file);
-      const fit = fitArtworkWithin(imported, document.size, 48);
-      const id = `image-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-      if (apply({
-        type: "add-image",
-        documentId: document.id,
-        element: {
-          id,
-          type: "image",
-          source: imported.dataUrl,
-          alt: imported.name,
-          x: Math.round(fit.x),
-          y: Math.round(fit.y),
-          width: Math.round(fit.width),
-          height: Math.round(fit.height),
-        },
-      })) {
-        setSelectedId(id);
-        if (saveOriginal) {
-          try {
-            const historyItem = await saveArtworkSource(file);
-            setArtworkHistory((items) => [historyItem, ...items.filter((item) => item.id !== historyItem.id)]);
-          } catch (error) {
-            showStatus(error instanceof Error ? `${imported.name} added; ${error.message}` : `${imported.name} added; original not saved.`);
-            return true;
-          }
-        }
-        showStatus(saveOriginal ? `${imported.name} added and saved` : `${imported.name} added from history`);
-        return true;
+      const importedPages = await importArtworkPages(file);
+      const activeSession = pagesRef.current[pageIndexRef.current];
+      let nextDocument: LabelDocument;
+      if (importedPages[0].sourceKind === "pdf-page") {
+        const newSessions = importedPages.map((artwork) => createEditorSession(
+          documentFromArtwork(artwork, `pdf-${crypto.randomUUID()}`),
+        ));
+        const existing = pagesRef.current;
+        // Keep existing work. A pristine, empty initial page is only a placeholder.
+        const keep = existing.length === 1 && existing[0].current().elements.length === 0
+          && !existing[0].canUndo ? [] : existing;
+        const nextSessions = [...keep, ...newSessions];
+        pagesRef.current = nextSessions;
+        pageIndexRef.current = keep.length;
+        setPageSessions(nextSessions);
+        setPageIndex(keep.length);
+        nextDocument = newSessions[0].current();
+      } else {
+        const artwork = importedPages[0];
+        const current = activeSession.current();
+        nextDocument = activeSession.execute({
+          type: "add-image", documentId: current.id,
+          element: { id: `image-${crypto.randomUUID()}`, type: "image", source: artwork.dataUrl,
+            alt: artwork.name, x: 0, y: 0, width: current.size.width, height: current.size.height, fit: "cover" },
+        });
       }
+      setDocument(nextDocument);
+      setArtifact(renderLabelDocument(nextDocument, { measureText: browserTextMeasure }));
+      setNameDraft(nextDocument.name);
+      setSelectedId(null);
+      setTextDraft("");
+      textDraftRef.current = "";
+      setDrag(null);
+      setResize(null);
+      setResizePreview(null);
+      setActivePanel(null);
+      if (saveOriginal) {
+        // Persistence is optional. Do not hold the editor/import lock while the
+        // Pi saves the original; imported pages already live in this workspace.
+        void saveArtworkSource(file).then((historyItem) => {
+          setArtworkHistory((items) => [historyItem, ...items.filter((item) => item.id !== historyItem.id)]);
+        }).catch(() => {
+          showStatus(`${file.name} imported; original could not be saved to upload history.`);
+        });
+      }
+      showStatus(`${file.name}: ${importedPages.length} ${importedPages.length === 1 ? "page" : "pages"} imported. Fill label is the default.`);
+      return true;
     } catch (error) {
       showStatus(error instanceof Error ? error.message : "That file could not be added.");
+      return false;
+    } finally {
+      importingRef.current = false;
+      setIsImporting(false);
     }
-    return false;
-  }, [apply, document.id, document.size.height, document.size.width, showStatus]);
+  }, [showStatus]);
 
   const addFromHistory = useCallback(async (item: ArtworkHistoryItem) => {
     if (historyLoadingId) return;
@@ -282,6 +316,25 @@ const App: React.FC = () => {
     }
     if (apply(commands)) showStatus("Text updated");
   }, [apply, selectedId, showStatus, workspace]);
+  const selectPage = useCallback((index: number) => {
+    if (printingRef.current || importingRef.current || index < 0 || index >= pagesRef.current.length || index === pageIndexRef.current) return;
+    editText();
+    const next = pagesRef.current[index].current();
+    pageIndexRef.current = index;
+    setPageIndex(index);
+    setDocument(next);
+    setArtifact(renderLabelDocument(next, { measureText: browserTextMeasure }));
+    setNameDraft(next.name);
+    setSelectedId(null);
+    setCopiedId(null);
+    setTextDraft("");
+    textDraftRef.current = "";
+    setDrag(null);
+    setResize(null);
+    setResizePreview(null);
+    setActivePanel(null);
+  }, [editText]);
+
   const finishTextEdit = useCallback(() => {
     editText();
     setActivePanel(null);
@@ -319,11 +372,19 @@ const App: React.FC = () => {
     if (!selected) return;
     if (apply({ type: "remove-element", documentId: document.id, elementId: selected.id })) { setSelectedId(null); showStatus("Element deleted"); }
   }, [apply, document.id, selected, showStatus]);
-  const printOnce = useCallback(async () => {
-    if (printingRef.current || document.elements.length === 0) return;
+  const printPages = useCallback(async (all = false) => {
+    if (printingRef.current || importingRef.current || document.elements.length === 0) return;
     if (printBlocked) {
       setPrintMessage(textOverflowsLabel ? "Text extends below the printable label. Move or shorten it before printing." : "Apply the current text before printing.");
       return;
+    }
+    if (all && !window.confirm(`Print all ${pagesRef.current.length} pages, one label per page, in order?`)) return;
+    const documents = all ? pagesRef.current.map((session) => session.current()) : [workspace.current()];
+    for (const [index, doc] of documents.entries()) {
+      if (!doc.elements.length || doc.elements.some(element => element.type === "text" && element.y + textHeightFor(element, element.text) > doc.size.height)) {
+        setPrintMessage(`Page ${all ? index + 1 : pageIndex + 1} is empty or has overflowing text. Fix it before printing.`);
+        return;
+      }
     }
     printingRef.current = true;
     setIsPrinting(true);
@@ -331,18 +392,20 @@ const App: React.FC = () => {
     try {
       const readiness = await refreshPrinter();
       if (!readiness.ready) throw new Error(readiness.detail);
-      setPrintMessage("Preparing label…");
-      const intent = await prepareLabelPrintIntent(artifact);
-      setPrintMessage("Sending one label…");
-      const receipt = await submitLabelPrintIntent(intent);
-      setPrintMessage(`${receipt.detail} Check the physical label before printing again.`);
+      // Prepare the complete snapshot before sending any page. A blank or invalid
+      // later page must not produce a partially submitted batch.
+      setPrintMessage(`Preparing ${documents.length} label(s)…`);
+      const intents = [];
+      for (const doc of documents) intents.push(await prepareLabelPrintIntent(renderLabelDocument(doc, { measureText: browserTextMeasure })));
+      const count = await submitPrintBatch(intents, submitLabelPrintIntent, (index) => setPrintMessage(`Sending label ${index} of ${intents.length}…`));
+      setPrintMessage(`${count} label(s) accepted by the print node. Check the physical labels before reprinting.`);
     } catch (error) {
       setPrintMessage(error instanceof Error ? error.message : "The print result is unknown. Check the printer before printing again.");
     } finally {
       printingRef.current = false;
       setIsPrinting(false);
     }
-  }, [artifact, document.elements.length, printBlocked, refreshPrinter, textOverflowsLabel]);
+  }, [document.elements.length, pageIndex, printBlocked, refreshPrinter, textOverflowsLabel, workspace]);
 
   useEffect(() => {
     if (!activePanel) {
@@ -560,11 +623,12 @@ const App: React.FC = () => {
   } : undefined;
   return (
     <main className="editor-shell">
+      {isImporting && <div className="import-progress" role="status">Importing pages…</div>}
       <header className="editor-header workspace-header">
         <button className="workspace-menu-button" type="button" onClick={() => setActivePanel("layers")} aria-label="Open workspace menu" aria-expanded={activePanel !== null}>☰</button>
         <span className="brand-mark" aria-hidden="true">TL</span>
         <div className="document-name-control"><input aria-label="Label name" value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} onBlur={rename} onKeyDown={(event) => { if (event.key === "Enter") rename(); }} /></div>
-        <div className="workspace-header-actions"><button className="workspace-printer-button" type="button" onClick={() => setActivePanel("printer")} aria-label="Open printer details"><span className={`printer-indicator ${printer?.ready ? "ready" : ""}`} aria-hidden="true" /><span className="workspace-printer-label">{printer?.ready ? "Ready" : "Printer"}</span></button><button className="button button-primary workspace-print-button" type="button" onClick={() => { void printOnce(); }} disabled={isPrinting || !printer?.ready || elements.length === 0 || printBlocked} title={printBlocked ? "Resolve text before printing" : undefined}>{isPrinting ? "Printing…" : "Print"}</button></div>
+        <div className="workspace-header-actions"><button className="workspace-printer-button" type="button" onClick={() => setActivePanel("printer")} aria-label="Open printer details"><span className={`printer-indicator ${printer?.ready ? "ready" : ""}`} aria-hidden="true" /><span className="workspace-printer-label">{printer?.ready ? "Ready" : "Printer"}</span></button><button className="button button-primary workspace-print-button" type="button" onClick={() => { void printPages(); }} disabled={isPrinting || isImporting || !printer?.ready || elements.length === 0 || printBlocked} title={printBlocked ? "Resolve text before printing" : undefined}>{isPrinting ? "Printing…" : pageSessions.length > 1 ? "Print this page" : "Print"}</button></div>
       </header>
       {(printMessage || textOverflowsLabel) && <div className="workspace-alerts">{printMessage && <div className="print-feedback" role="status">{printMessage}<button className="button button-quiet" onClick={() => setPrintMessage("")} disabled={isPrinting} aria-label="Dismiss print message">Dismiss</button></div>}{textOverflowsLabel && <div className="print-feedback overflow-warning" role="alert">Text extends below the printable label. Move or shorten it before printing.</div>}</div>}
       {status && <div className="status-message" role="status">{status}</div>}
@@ -572,14 +636,32 @@ const App: React.FC = () => {
       {activePanel && <><button className="flyout-backdrop" type="button" aria-label="Close workspace panel" onClick={() => { editText(); setActivePanel(null); }} /><aside className="workspace-flyout" ref={flyoutRef} role="dialog" aria-modal="true" aria-label={`${activePanel} panel`}>
         <div className="flyout-topline"><strong>{activePanel === "edit" ? "Edit" : activePanel === "layers" ? "Layers" : activePanel === "uploads" ? "Uploads" : "Printer"}</strong><button className="button button-quiet" type="button" onClick={() => { editText(); setActivePanel(null); }} data-flyout-autofocus aria-label="Close panel">Close</button></div>
         <nav className="flyout-tabs" aria-label="Workspace panels">{(["edit", "layers", "uploads", "printer"] as FlyoutPanel[]).map((panel) => <button key={panel} className={activePanel === panel ? "active" : ""} type="button" aria-current={activePanel === panel ? "page" : undefined} onClick={() => { editText(); setActivePanel(panel); }}>{panel[0].toUpperCase() + panel.slice(1)}</button>)}</nav>
-        <div className="flyout-history-actions" aria-label="History"><button className="button button-quiet" type="button" onClick={() => travelHistory("undo")} disabled={!workspace.canUndo}>Undo</button><button className="button button-quiet" type="button" onClick={() => travelHistory("redo")} disabled={!workspace.canRedo}>Redo</button></div>
+        <div className="flyout-history-actions" aria-label="History"><button className="button button-quiet" type="button" onClick={() => travelHistory("undo")} disabled={isPrinting || isImporting || !workspace.canUndo}>Undo</button><button className="button button-quiet" type="button" onClick={() => travelHistory("redo")} disabled={isPrinting || isImporting || !workspace.canRedo}>Redo</button></div>
         {activePanel === "edit" && <div className="flyout-content"><div className="flyout-section-heading"><span>{selected ? `${selected.type[0].toUpperCase()}${selected.type.slice(1)} selected` : "No selection"}</span></div>{selected ? <div className={`properties-content ${selected.type === "text" ? "text-properties-panel" : ""}`}>{selected.type === "text" ? <><label className="field-label" htmlFor="selected-text">Label text</label><textarea ref={textAreaRef} id="selected-text" placeholder="Type your label text…" value={textDraft} onChange={(event) => { textDraftRef.current = event.target.value; setTextDraft(event.target.value); }} onBlur={editText} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") finishTextEdit(); }} /><p className="control-help">Text wraps live. Press Return for a new line.</p><p className="draft-warning" role="status" style={{ visibility: hasUnappliedTextDraft ? "visible" : "hidden" }}>Preview updated. Done commits before printing.</p><button className="button button-primary full-width" type="button" onClick={finishTextEdit}>Done</button></> : selected.type === "image" ? <><p className="empty-copy">Drag to move. Drag a corner handle to scale.</p><div className="image-controls"><span className="field-label">Framing</span><p className="image-setting-summary">{selected.fit === "cover" ? "Fills label with centered crop" : "Shows the whole image"} · {selected.rotation ?? 0}°</p><div className="property-button-row"><button className="button" type="button" onClick={() => frameImage("contain")}>Fit whole</button><button className="button" type="button" onClick={() => frameImage("cover")}>Fill label</button><button className="button button-quiet" type="button" onClick={() => rotateImage(-1)}>Rotate left</button><button className="button button-quiet" type="button" onClick={() => rotateImage(1)}>Rotate right</button></div></div></> : <p className="empty-copy">Drag the rectangle on the label to reposition it.</p>}<div className="mobile-secondary-action-row"><button className="button button-quiet" type="button" onClick={copySelected}>Copy</button><button className="button button-quiet" type="button" onClick={pasteSelected} disabled={!copiedId && !selectedId}>Paste</button><button className="button button-quiet" type="button" onClick={() => duplicate(selectedId)}>Duplicate</button><button className="button button-danger" type="button" onClick={removeSelected}>Delete</button></div></div> : <p className="empty-copy">Add text or import artwork from the bottom bar.</p>}</div>}
         {activePanel === "layers" && <div className="flyout-content"><div className="layer-list">{elements.map((element, index) => <button className={`layer-row ${selectedId === element.id ? "selected" : ""}`} aria-pressed={selectedId === element.id} type="button" key={element.id} onClick={() => { editText(); setSelectedId(element.id); setActivePanel("edit"); }}><span className="layer-number">{String(index + 1).padStart(2, "0")}</span><span className="layer-label">{element.type === "text" ? element.text || "Empty text" : element.type === "image" ? element.alt || "Image" : "Rectangle"}</span><span className="layer-kind">{element.type}</span></button>)}</div>{elements.length === 0 && <p className="empty-copy">Add text or import artwork from the bottom bar.</p>}</div>}
         {activePanel === "uploads" && <div className="flyout-content">{artworkHistory.length > 0 ? <div className="history-carousel">{artworkHistory.map((item) => <button className="history-card" type="button" key={item.id} onClick={() => { void addFromHistory(item); setActivePanel("edit"); }} disabled={historyLoadingId !== null}>{item.mimeType.startsWith("image/") ? <img src={item.sourceUrl} alt="" loading="lazy" decoding="async" /> : <span className="history-pdf" aria-hidden="true">PDF</span>}<span className="history-name">{item.name}</span>{historyLoadingId === item.id && <span className="history-loading">Loading…</span>}</button>)}</div> : <p className="empty-copy">Your next uploaded image or PDF will appear here.</p>}<button className="button button-primary full-width" type="button" onClick={() => fileInputRef.current?.click()}>Import artwork</button></div>}
         {activePanel === "printer" && <div className="flyout-content"><div className="printer-detail-card"><span className={`printer-indicator ${printer?.ready ? "ready" : ""}`} aria-hidden="true" /><strong>{printer?.ready ? "Printer ready" : printer ? "Printer unavailable" : "Connecting to printer…"}</strong><p>{printer?.detail ?? "Checking the Pi print node."}</p></div><button className="button button-quiet full-width" type="button" onClick={() => { void refreshPrinter(); }} disabled={checkingPrinter || isPrinting}>{checkingPrinter ? "Checking…" : "Refresh status"}</button><p className="control-help">Print submits one guarded label only after the text and bounds checks pass.</p></div>}
       </aside></>}
+      {pageSessions.length > 1 && <nav className="page-navigation" aria-label="PDF pages"
+        onTouchStart={(event) => { const touch = event.touches[0]; pageSwipeStart.current = { x: touch.clientX, y: touch.clientY }; }}
+        onTouchEnd={(event) => {
+          const start = pageSwipeStart.current;
+          pageSwipeStart.current = null;
+          const touch = event.changedTouches[0];
+          if (start && touch && Math.abs(touch.clientX - start.x) > 60 && Math.abs(touch.clientY - start.y) < 40) {
+            event.preventDefault();
+            selectPage(pageIndex + (touch.clientX < start.x ? 1 : -1));
+          }
+        }} onTouchCancel={() => { pageSwipeStart.current = null; }}>
+        <button type="button" className="button" onClick={() => selectPage(pageIndex - 1)} disabled={pageIndex === 0 || isImporting || isPrinting}>Previous</button>
+        <span aria-live="polite">Page {pageIndex + 1} of {pageSessions.length}</span>
+        <button type="button" className="button" onClick={() => selectPage(pageIndex + 1)} disabled={pageIndex === pageSessions.length - 1 || isImporting || isPrinting}>Next</button>
+        <button type="button" className="button button-quiet print-all" onClick={() => { void printPages(true); }} disabled={isPrinting || isImporting || !printer?.ready || printBlocked}>Print all {pageSessions.length} pages…</button>
+      </nav>}
       <section className="editor-layout">
-        <section className="canvas-column"><div className="workspace-bottom-bar" aria-label="Quick label actions"><button className="workspace-bottom-button workspace-bottom-primary" type="button" onClick={addText}>Text</button><button className="workspace-bottom-button" type="button" onClick={() => fileInputRef.current?.click()}>Import</button><button className="workspace-bottom-button" type="button" onClick={() => travelHistory("undo")} disabled={!workspace.canUndo}>Undo</button><button className="workspace-bottom-button" type="button" onClick={() => setActivePanel("edit")} disabled={!selected}>Controls</button></div><div className={`canvas-stage ${isDropTarget ? "drop-target" : ""}`} onDragEnter={(event) => { event.preventDefault(); setIsDropTarget(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setIsDropTarget(false)} onDrop={handleDrop}>{isDropTarget && <div className="drop-overlay">Drop image or PDF</div>}<div ref={paperRef} className="paper-frame" style={{ aspectRatio: `${width} / ${height}` }} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}><div className="paper-svg" dangerouslySetInnerHTML={{ __html: previewArtifact.source }} />{imageSelection && <div className="image-selection" style={selectionStyle} aria-label="Selected image frame">{RESIZE_CORNERS.map(({ corner, name, className }) => <button key={name} className={`resize-handle ${className}`} type="button" aria-label={`Resize from ${name} corner`} onPointerDown={(event) => onResizePointerDown(event, corner)} onPointerMove={onResizePointerMove} onPointerUp={finishResize} onPointerCancel={cancelResize} />)}</div>}</div></div></section>
+        <section className="canvas-column"><div className="workspace-bottom-bar" aria-label="Quick label actions"><button className="workspace-bottom-button workspace-bottom-primary" type="button" onClick={addText}>Text</button><button className="workspace-bottom-button" type="button" onClick={() => fileInputRef.current?.click()}>Import</button><button className="workspace-bottom-button" type="button" onClick={() => travelHistory("undo")} disabled={isPrinting || isImporting || !workspace.canUndo}>Undo</button><button className="workspace-bottom-button" type="button" onClick={() => setActivePanel("edit")} disabled={!selected}>Controls</button></div><div className={`canvas-stage ${pageSessions.length > 1 ? "has-pages" : ""} ${isDropTarget ? "drop-target" : ""}`} onDragEnter={(event) => { event.preventDefault(); setIsDropTarget(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setIsDropTarget(false)} onDrop={handleDrop}>{isDropTarget && <div className="drop-overlay">Drop image or PDF</div>}{pageIndex > 0 && <button className="page-peek page-peek-left" aria-label="Previous page preview" disabled={isPrinting || isImporting} onClick={() => selectPage(pageIndex - 1)}><span dangerouslySetInnerHTML={{ __html: renderLabelDocument(pageSessions[pageIndex - 1].current()).source }} /></button>}
+          {pageIndex + 1 < pageSessions.length && <button className="page-peek page-peek-right" aria-label="Next page preview" disabled={isPrinting || isImporting} onClick={() => selectPage(pageIndex + 1)}><span dangerouslySetInnerHTML={{ __html: renderLabelDocument(pageSessions[pageIndex + 1].current()).source }} /></button>}
+          <div ref={paperRef} className="paper-frame" style={{ aspectRatio: `${width} / ${height}` }} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}><div className="paper-svg" dangerouslySetInnerHTML={{ __html: previewArtifact.source }} />{imageSelection && <div className="image-selection" style={selectionStyle} aria-label="Selected image frame">{RESIZE_CORNERS.map(({ corner, name, className }) => <button key={name} className={`resize-handle ${className}`} type="button" aria-label={`Resize from ${name} corner`} onPointerDown={(event) => onResizePointerDown(event, corner)} onPointerMove={onResizePointerMove} onPointerUp={finishResize} onPointerCancel={cancelResize} />)}</div>}</div></div></section>
       </section>
     </main>
   );
