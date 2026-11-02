@@ -5,8 +5,8 @@ const pdfjs = vi.hoisted(() => ({
   getDocument: vi.fn(),
   GlobalWorkerOptions: { workerSrc: "" },
 }));
-vi.mock("pdfjs-dist", () => pdfjs);
-vi.mock("pdfjs-dist/build/pdf.worker.min.mjs?url", () => ({ default: "test-pdf-worker.mjs" }));
+vi.mock("pdfjs-dist/legacy/build/pdf.mjs", () => pdfjs);
+vi.mock("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url", () => ({ default: "test-pdf-worker.mjs" }));
 
 describe("classifyArtworkFile", () => {
   it.each([

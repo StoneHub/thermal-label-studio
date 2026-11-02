@@ -255,11 +255,12 @@ const rasterizePdfPages = async (
     throw new Error("The PDF exceeds the 32 MiB file-size limit. Split or reduce the PDF and try again.");
   }
 
-  // Keep the worker import next to the PDF import. It avoids loading PDF.js
+  // The legacy build supplies modern JS compatibility (e.g. Map upsert) for
+  // older mobile browsers. Keep its matching worker next to the PDF import. It avoids loading PDF.js
   // for image-only sessions and lets Vite turn the worker into an asset URL.
   const [pdfjs, workerModule] = await Promise.all([
-    import("pdfjs-dist"),
-    import("pdfjs-dist/build/pdf.worker.min.mjs?url"),
+    import("pdfjs-dist/legacy/build/pdf.mjs"),
+    import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url"),
   ]);
   pdfjs.GlobalWorkerOptions.workerSrc = workerModule.default;
 
