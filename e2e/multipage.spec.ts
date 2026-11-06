@@ -143,3 +143,20 @@ for (const disconnect of [false, true]) test(`batch stops after ${disconnect ? '
   expect(mock.submissions).toHaveLength(2);
   expect(mock.unexpected).toEqual([]);
 });
+
+test('crop and its undo history stay with the selected PDF page', async ({ page }) => {
+  const mock = await setup(page);
+  await page.getByRole('button', { name: 'Crop', exact: true }).click();
+  await page.getByText('Fine-tune with numbers', { exact: true }).click();
+  await page.getByLabel('Height (%)', { exact: true }).fill('60');
+  await page.getByRole('button', { name: 'Use crop' }).click();
+  const cropped = await page.locator('.paper-svg').innerHTML();
+  expect(await page.locator('.paper-svg svg').count()).toBe(3);
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  expect(await page.locator('.paper-svg svg').count()).toBe(1);
+  await page.getByRole('button', { name: 'Previous', exact: true }).click();
+  expect(await page.locator('.paper-svg').innerHTML()).toBe(cropped);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  expect(await page.locator('.paper-svg svg').count()).toBe(1);
+  expect(mock.submissions).toHaveLength(0);
+});

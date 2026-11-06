@@ -50,8 +50,20 @@ const AddRectangleCommandSchema = z.object({
   ry: z.number().nonnegative().optional(),
 });
 
+const ImageCropSchema = z.object({
+  x: z.number().nonnegative(),
+  y: z.number().nonnegative(),
+  width: z.number().positive(),
+  height: z.number().positive(),
+  sourceWidth: z.number().positive(),
+  sourceHeight: z.number().positive(),
+}).refine((crop) => crop.x + crop.width <= crop.sourceWidth && crop.y + crop.height <= crop.sourceHeight, {
+  message: "Crop must stay within the source image",
+});
+
 const AddImageCommandSchema = z.object({
   type: z.literal("add-image"),
+  crop: ImageCropSchema.optional(),
   elementId: z.string().min(1).optional(),
   source: z.string().startsWith("data:image/"),
   alt: z.string().optional(),
@@ -65,6 +77,7 @@ const AddImageCommandSchema = z.object({
 
 const UpdateImageCommandSchema = z.object({
   type: z.literal("update-image"),
+  crop: ImageCropSchema.nullable().optional(),
   elementId: z.string().min(1),
   fit: z.enum(["contain", "cover"]).optional(),
   rotation: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]).optional(),

@@ -38,6 +38,16 @@ export interface LabelRectangleElement {
   readonly ry?: number;
 }
 
+/** A non-destructive source region, measured in original image pixels. */
+export interface LabelImageCrop {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  readonly sourceWidth: number;
+  readonly sourceHeight: number;
+}
+
 export interface LabelImageElement {
   readonly id: string;
   readonly type: "image";
@@ -46,6 +56,7 @@ export interface LabelImageElement {
   readonly width: number;
   readonly height: number;
   readonly source: string;
+  readonly crop?: LabelImageCrop;
   readonly alt?: string;
   /** Keep the whole image visible, or fill the frame with a centered crop. */
   readonly fit?: "contain" | "cover";
@@ -165,12 +176,15 @@ export interface AddImageCommand {
   readonly width?: number;
   readonly height?: number;
   readonly source?: string;
+  readonly crop?: LabelImageCrop;
   readonly alt?: string;
   readonly fit?: "contain" | "cover";
   readonly rotation?: 0 | 90 | 180 | 270;
 }
 
 export interface UpdateImageCommand {
+  /** Omit to retain the current crop; null restores the whole source. */
+  readonly crop?: LabelImageCrop | null;
   readonly type: "update-image";
   readonly documentId: string;
   readonly elementId: string;
@@ -283,6 +297,22 @@ function requireImageRotation(value: unknown, label: string): 0 | 90 | 180 | 270
   return value;
 }
 
+function requireImageCrop(value: unknown, label: string): LabelImageCrop {
+  if (!isRecord(value)) fail("invalid-document", `${label} must be an object`);
+  const crop = {
+    x: requireNonNegativeFinite(value.x, `${label}.x`),
+    y: requireNonNegativeFinite(value.y, `${label}.y`),
+    width: requirePositive(value.width, `${label}.width`),
+    height: requirePositive(value.height, `${label}.height`),
+    sourceWidth: requirePositive(value.sourceWidth, `${label}.sourceWidth`),
+    sourceHeight: requirePositive(value.sourceHeight, `${label}.sourceHeight`),
+  };
+  if (crop.x + crop.width > crop.sourceWidth || crop.y + crop.height > crop.sourceHeight) {
+    fail("invalid-document", `${label} must stay within the source image`);
+  }
+  return crop;
+}
+
 function clone<T>(value: T): T {
   if (Array.isArray(value)) return value.map(clone) as T;
   if (!isRecord(value)) return value;
@@ -336,6 +366,7 @@ function validateElement(value: unknown, index: number): LabelElement {
       ...base,
       type,
       source: requireRasterDataUrl(value.source, `elements[${index}].source`),
+      ...(value.crop === undefined ? {} : { crop: requireImageCrop(value.crop, `elements[${index}].crop`) }),
       ...(value.alt === undefined ? {} : { alt: typeof value.alt === "string" ? value.alt : fail("invalid-document", `elements[${index}].alt must be a string`) }),
       ...(value.fit === undefined ? {} : { fit: requireImageFit(value.fit, `elements[${index}].fit`) }),
       ...(value.rotation === undefined ? {} : { rotation: requireImageRotation(value.rotation, `elements[${index}].rotation`) }),
@@ -518,6 +549,7 @@ export function createLabelWorkspace(initialDocuments: readonly NewLabelDocument
           width: command.width ?? supplied.width ?? 100,
           height: command.height ?? supplied.height ?? 100,
           source: command.source ?? supplied.source,
+          crop: command.crop === undefined ? supplied.crop : command.crop,
           alt: command.alt ?? supplied.alt,
           fit: command.fit ?? supplied.fit,
           rotation: command.rotation ?? supplied.rotation,
@@ -528,12 +560,13 @@ export function createLabelWorkspace(initialDocuments: readonly NewLabelDocument
         const previous = getKnownDocument(command.documentId);
         const element = findElement(previous, command.elementId);
         if (element.type !== "image") fail("invalid-command", `Element "${command.elementId}" is not an image element`);
-        if (command.fit === undefined && command.rotation === undefined) {
-          fail("invalid-command", "update-image requires fit or rotation");
+        if (command.fit === undefined && command.rotation === undefined && command.crop === undefined) {
+          fail("invalid-command", "update-image requires fit, rotation, or crop");
         }
         const nextElements = previous.elements.map((candidate, index) => candidate.id === element.id
           ? validateElement({
               ...candidate,
+              ...(command.crop === undefined ? {} : { crop: command.crop === null ? undefined : command.crop }),
               ...(command.fit === undefined ? {} : { fit: command.fit }),
               ...(command.rotation === undefined ? {} : { rotation: command.rotation }),
             }, index)
