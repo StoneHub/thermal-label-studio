@@ -2,13 +2,13 @@
 
 Thermal Label Studio is a local label editor for people and software agents. The web app supports direct canvas editing, while the MCP adapter exposes the same document and rendering core to other software.
 
-Printer discovery and delivery belong to Fleet. This repository does not open raw printer sockets, create PrintIntents, or claim that a physical label printed.
+Printer discovery and delivery belong to Fleet. The web app can prepare one fixed `PrintIntent` for Fleet's Phomemo PM-241-BT adapter. This repository does not open raw printer sockets or claim that a physical label printed.
 
 ## Current slice
 
 - `packages/core`: canonical `LabelDocument`, Workspace edits, and SVG `RenderArtifact` generation
 - `apps/mcp`: local stdio tools for creating, editing, and previewing labels
-- `apps/web`: human editor with direct dragging, element copy/paste, and image or PDF import
+- `apps/web`: static human editor with direct dragging, deterministic centered crop or whole-image fit, quarter-turn rotation, element copy/paste, image or PDF import, and one-attempt `PrintIntent` preparation
 
 The old Konva editor and Express app remain in Git history and the working tree as reference while the rewrite proves its replacement seams. The Express app is not part of the default development command.
 
@@ -23,6 +23,15 @@ pnpm dev
 
 Open `http://localhost:5173`.
 
+The production web build uses relative assets and system fonts. It can be served as static files by the Pi print node without running Node.js on the Pi.
+
+## Editing and printing
+
+- Undo and redo up to 40 edits using the toolbar or Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z. Framing and rotation each count as one edit. Edit history lasts for the current browser session.
+- The printer connection bar checks the fixed Pi adapter when the editor opens. Refresh it after reconnecting the Pi or printer. Printing checks readiness again before preparing a label.
+- Print results remain visible until dismissed, including on phones. An interrupted request is never retried automatically; check the printer before submitting again.
+- The standalone development server supports editing. Printing and saved uploads require Fleet's Pi service at the same origin.
+
 ## Run the MCP adapter
 
 ```bash
@@ -34,9 +43,9 @@ See `apps/mcp/README.md` for local client configuration and current boundaries.
 ## Verification
 
 ```bash
+pnpm build
 pnpm typecheck
 pnpm test
-pnpm build
 ```
 
 ## Domain and agent instructions
@@ -54,3 +63,38 @@ pnpm build
 ## License
 
 MIT. See [LICENSE](./LICENSE).
+
+### Multi-page PDF labels
+
+Importing a PDF creates one editable label per page, in PDF order. Use Previous,
+Next, or the neighboring-page previews to select a page; the page controls also
+support a horizontal swipe. Edits and undo history stay with each page. Importing
+another PDF appends its pages, preserving work already in the workspace (an empty
+initial placeholder is replaced).
+
+**Print this page** is the default action. **Print all pages…** is an explicit,
+confirmed action that prepares all pages before sending one guarded PrintIntent
+per page in order. A rejected or uncertain result stops the sequence without
+retrying; the message reports earlier accepted labels and the page where it
+stopped. Inspect the printer before reprinting a possibly accepted page.
+
+Imported artwork defaults to **Fill label** (centered crop); **Fit whole** remains
+available in Controls when the entire source must be visible. Review borders,
+barcodes, and addresses before printing. Imports allow at most 50 PDF pages,
+32 MiB source size, and bounded raster memory; split larger documents first.
+
+### Mobile browser regression checks
+
+`pnpm exec playwright install chromium` then `pnpm exec playwright test` runs the
+synthetic three-page PDF flows on a phone-sized Chromium viewport. All print-node
+requests are mocked and all non-local requests are blocked; no physical printer
+or user documents are used. Tests cover page peeks/navigation, Fill label,
+selected-page printing, cancel/all, duplicate guards, and stopping a failed batch.
+
+The scoped PR workflow uses only a standard public-repository GitHub runner and
+skips private repositories. It does not create caches or uploaded artifacts.
+Two bounded synthetic PNG screenshots are retained in workflow logs between
+`SYNTHETIC_PNG_BEGIN/END` markers; concatenate the `SYNTHETIC_PNG_DATA` payloads
+and base64-decode to review them. Logs avoid unverified artifact-storage spending.
+If this repository becomes private, verify billing safeguards before changing
+that guard. Browser mocks prove TransportReceipt handling, not physical printing.

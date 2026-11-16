@@ -402,10 +402,14 @@ export type {
   MoveElementCommand,
   NewLabelDocument,
   RemoveElementCommand,
+  ResizeElementCommand,
   RenameDocumentCommand,
   UpdateTextCommand,
+  UpdateImageCommand,
   WorkspaceChange,
   WorkspaceCommand,
 } from "./workspace.js";
 export { renderLabelDocument } from "./renderer.js";
-export type { RenderArtifact } from "./renderer.js";
+export type { RenderArtifact, RenderOptions } from "./renderer.js";
+export { measureLabelText, wrapLabelText } from "./textWrap.js";
+export type { LabelTextMeasure } from "./textWrap.js";

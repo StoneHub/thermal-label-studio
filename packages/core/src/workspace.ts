@@ -20,6 +20,8 @@ export interface LabelTextElement {
   readonly fill?: string;
   readonly fontFamily?: string;
   readonly fontWeight?: number;
+  readonly lineHeight?: number;
+  readonly letterSpacing?: number;
 }
 
 export interface LabelRectangleElement {
@@ -45,6 +47,10 @@ export interface LabelImageElement {
   readonly height: number;
   readonly source: string;
   readonly alt?: string;
+  /** Keep the whole image visible, or fill the frame with a centered crop. */
+  readonly fit?: "contain" | "cover";
+  /** Quarter-turn rotation applied around the image frame's center. */
+  readonly rotation?: 0 | 90 | 180 | 270;
 }
 
 export type LabelElement = LabelTextElement | LabelRectangleElement | LabelImageElement;
@@ -92,6 +98,8 @@ export interface AddTextCommand {
   readonly fill?: string;
   readonly fontFamily?: string;
   readonly fontWeight?: number;
+  readonly lineHeight?: number;
+  readonly letterSpacing?: number;
 }
 
 export interface UpdateTextCommand {
@@ -99,8 +107,8 @@ export interface UpdateTextCommand {
   readonly documentId: string;
   readonly elementId: string;
   readonly text?: string;
-  readonly updates?: Partial<Pick<LabelTextElement, "text" | "fontSize" | "fill" | "fontFamily" | "fontWeight">>;
-  readonly patch?: Partial<Pick<LabelTextElement, "text" | "fontSize" | "fill" | "fontFamily" | "fontWeight">>;
+  readonly updates?: Partial<Pick<LabelTextElement, "text" | "fontSize" | "fill" | "fontFamily" | "fontWeight" | "lineHeight" | "letterSpacing">>;
+  readonly patch?: Partial<Pick<LabelTextElement, "text" | "fontSize" | "fill" | "fontFamily" | "fontWeight" | "lineHeight" | "letterSpacing">>;
 }
 
 export interface MoveElementCommand {
@@ -113,6 +121,16 @@ export interface MoveElementCommand {
   /** Move an element by a delta. Use this form when x/y are omitted. */
   readonly dx?: number;
   readonly dy?: number;
+}
+
+export interface ResizeElementCommand {
+  readonly type: "resize-element";
+  readonly documentId: string;
+  readonly elementId: string;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
 }
 
 export interface RemoveElementCommand {
@@ -148,6 +166,16 @@ export interface AddImageCommand {
   readonly height?: number;
   readonly source?: string;
   readonly alt?: string;
+  readonly fit?: "contain" | "cover";
+  readonly rotation?: 0 | 90 | 180 | 270;
+}
+
+export interface UpdateImageCommand {
+  readonly type: "update-image";
+  readonly documentId: string;
+  readonly elementId: string;
+  readonly fit?: "contain" | "cover";
+  readonly rotation?: 0 | 90 | 180 | 270;
 }
 
 export interface DuplicateElementCommand {
@@ -165,9 +193,11 @@ export type WorkspaceCommand =
   | AddTextCommand
   | UpdateTextCommand
   | MoveElementCommand
+  | ResizeElementCommand
   | RemoveElementCommand
   | AddRectangleCommand
   | AddImageCommand
+  | UpdateImageCommand
   | DuplicateElementCommand;
 
 export interface WorkspaceChange {
@@ -239,6 +269,20 @@ function requireRasterDataUrl(value: unknown, label: string): string {
   return value;
 }
 
+function requireImageFit(value: unknown, label: string): "contain" | "cover" {
+  if (value !== "contain" && value !== "cover") {
+    fail("invalid-document", `${label} must be contain or cover`);
+  }
+  return value;
+}
+
+function requireImageRotation(value: unknown, label: string): 0 | 90 | 180 | 270 {
+  if (value !== 0 && value !== 90 && value !== 180 && value !== 270) {
+    fail("invalid-document", `${label} must be 0, 90, 180, or 270`);
+  }
+  return value;
+}
+
 function clone<T>(value: T): T {
   if (Array.isArray(value)) return value.map(clone) as T;
   if (!isRecord(value)) return value;
@@ -282,6 +326,8 @@ function validateElement(value: unknown, index: number): LabelElement {
       ...(value.fill === undefined ? {} : { fill: requireString(value.fill, `elements[${index}].fill`) }),
       ...(value.fontFamily === undefined ? {} : { fontFamily: requireString(value.fontFamily, `elements[${index}].fontFamily`) }),
       ...(value.fontWeight === undefined ? {} : { fontWeight: requirePositive(value.fontWeight, `elements[${index}].fontWeight`) }),
+      ...(value.lineHeight === undefined ? {} : { lineHeight: requirePositive(value.lineHeight, `elements[${index}].lineHeight`) }),
+      ...(value.letterSpacing === undefined ? {} : { letterSpacing: requireFinite(value.letterSpacing, `elements[${index}].letterSpacing`) }),
     };
     return element;
   }
@@ -291,6 +337,8 @@ function validateElement(value: unknown, index: number): LabelElement {
       type,
       source: requireRasterDataUrl(value.source, `elements[${index}].source`),
       ...(value.alt === undefined ? {} : { alt: typeof value.alt === "string" ? value.alt : fail("invalid-document", `elements[${index}].alt must be a string`) }),
+      ...(value.fit === undefined ? {} : { fit: requireImageFit(value.fit, `elements[${index}].fit`) }),
+      ...(value.rotation === undefined ? {} : { rotation: requireImageRotation(value.rotation, `elements[${index}].rotation`) }),
     };
     return image;
   }
@@ -432,6 +480,8 @@ export function createLabelWorkspace(initialDocuments: readonly NewLabelDocument
           fill: command.fill ?? supplied.fill,
           fontFamily: command.fontFamily ?? supplied.fontFamily,
           fontWeight: command.fontWeight ?? supplied.fontWeight,
+          lineHeight: command.lineHeight ?? supplied.lineHeight,
+          letterSpacing: command.letterSpacing ?? supplied.letterSpacing,
         }, previous.elements.length);
         return replace(updatedDocument(previous, [...previous.elements, element]), previous, command);
       }
@@ -469,8 +519,26 @@ export function createLabelWorkspace(initialDocuments: readonly NewLabelDocument
           height: command.height ?? supplied.height ?? 100,
           source: command.source ?? supplied.source,
           alt: command.alt ?? supplied.alt,
+          fit: command.fit ?? supplied.fit,
+          rotation: command.rotation ?? supplied.rotation,
         }, previous.elements.length);
         return replace(updatedDocument(previous, [...previous.elements, element]), previous, command);
+      }
+      case "update-image": {
+        const previous = getKnownDocument(command.documentId);
+        const element = findElement(previous, command.elementId);
+        if (element.type !== "image") fail("invalid-command", `Element "${command.elementId}" is not an image element`);
+        if (command.fit === undefined && command.rotation === undefined) {
+          fail("invalid-command", "update-image requires fit or rotation");
+        }
+        const nextElements = previous.elements.map((candidate, index) => candidate.id === element.id
+          ? validateElement({
+              ...candidate,
+              ...(command.fit === undefined ? {} : { fit: command.fit }),
+              ...(command.rotation === undefined ? {} : { rotation: command.rotation }),
+            }, index)
+          : candidate);
+        return replace(updatedDocument(previous, nextElements), previous, command);
       }
       case "duplicate-element": {
         const previous = getKnownDocument(command.documentId);
@@ -510,6 +578,20 @@ export function createLabelWorkspace(initialDocuments: readonly NewLabelDocument
           const y = hasAbsolute ? command.y! : candidate.y + command.dy!;
           return validateElement({ ...candidate, x, y }, previous.elements.indexOf(candidate));
         });
+        return replace(updatedDocument(previous, nextElements), previous, command);
+      }
+      case "resize-element": {
+        const previous = getKnownDocument(command.documentId);
+        findElement(previous, command.elementId);
+        const nextElements = previous.elements.map((candidate, index) => candidate.id === command.elementId
+          ? validateElement({
+              ...candidate,
+              x: command.x,
+              y: command.y,
+              width: command.width,
+              height: command.height,
+            }, index)
+          : candidate);
         return replace(updatedDocument(previous, nextElements), previous, command);
       }
       case "remove-element": {
