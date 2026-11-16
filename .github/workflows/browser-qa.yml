@@ -1,7 +1,7 @@
 name: Label browser QA
 on:
   pull_request:
-    branches: [codex/phone-first-editor]
+    branches: [master]
     paths: ['apps/web/**', 'packages/core/**', 'e2e/**', 'playwright.config.ts', 'package.json', 'pnpm-lock.yaml', '.github/workflows/browser-qa.yml']
 permissions:
   contents: read
