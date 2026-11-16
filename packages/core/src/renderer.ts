@@ -86,7 +86,34 @@ function imageElement(element: LabelImageElement): string {
     attribute("preserveAspectRatio", element.fit === "cover" ? "xMidYMid slice" : "xMidYMid meet"),
     ...(element.alt === undefined ? [] : [attribute("aria-label", element.alt)]),
   ].join("");
-  const image = `<image${attrs}/>`;
+  let image = `<image${attrs}/>`;
+  if (element.crop) {
+    const crop = element.crop;
+    const scale = element.fit === "cover"
+      ? Math.max(element.width / crop.width, element.height / crop.height)
+      : Math.min(element.width / crop.width, element.height / crop.height);
+    const width = crop.width * scale;
+    const height = crop.height * scale;
+    // The inner viewport clips the discarded source pixels even in contain's
+    // letterboxing. The outer viewport clips cover to the element frame.
+    // Neither clipping boundary depends on user-controlled IDs or URL refs.
+    const frameAttrs = [
+      ...elementAttributes(element),
+      attribute("x", element.x), attribute("y", element.y),
+      attribute("width", element.width), attribute("height", element.height),
+      attribute("viewBox", `0 0 ${element.width} ${element.height}`),
+      attribute("overflow", "hidden"),
+      ...(element.alt === undefined ? [] : [attribute("aria-label", element.alt)]),
+    ].join("");
+    const cropAttrs = [
+      attribute("x", (element.width - width) / 2),
+      attribute("y", (element.height - height) / 2),
+      attribute("width", width), attribute("height", height),
+      attribute("viewBox", `${crop.x} ${crop.y} ${crop.width} ${crop.height}`),
+      attribute("preserveAspectRatio", "none"), attribute("overflow", "hidden"),
+    ].join("");
+    image = `<svg${frameAttrs}><svg${cropAttrs}><image${attribute("width", crop.sourceWidth)}${attribute("height", crop.sourceHeight)}${attribute("href", element.source)}${attribute("preserveAspectRatio", "none")}/></svg></svg>`;
+  }
   return rotation === 0 ? image : `<g${attribute("transform", `rotate(${rotation} ${centerX} ${centerY})`)}>${image}</g>`;
 }
 

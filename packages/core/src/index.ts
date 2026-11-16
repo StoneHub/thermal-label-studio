@@ -396,6 +396,7 @@ export type {
   LabelDocumentSize,
   LabelElement,
   LabelImageElement,
+  LabelImageCrop,
   LabelRectangleElement,
   LabelTextElement,
   LabelWorkspace,
