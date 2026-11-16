@@ -15,6 +15,7 @@ import { ImageCropDialog } from "./components/ImageCropDialog";
 import { importArtworkPages } from "./lib/artworkImport";
 import { documentFromArtwork } from "./lib/documentPages";
 import { submitPrintBatch } from "./lib/printBatch";
+import { bakeImageCrops } from "./lib/printCrop";
 import {
   listArtworkHistory,
   loadArtworkSource,
@@ -406,7 +407,7 @@ const App: React.FC = () => {
       // later page must not produce a partially submitted batch.
       setPrintMessage(`Preparing ${documents.length} label(s)…`);
       const intents = [];
-      for (const doc of documents) intents.push(await prepareLabelPrintIntent(renderLabelDocument(doc, { measureText: browserTextMeasure })));
+      for (const doc of documents) intents.push(await prepareLabelPrintIntent(renderLabelDocument(await bakeImageCrops(doc), { measureText: browserTextMeasure })));
       const count = await submitPrintBatch(intents, submitLabelPrintIntent, (index) => setPrintMessage(`Sending label ${index} of ${intents.length}…`));
       setPrintMessage(`${count} label(s) accepted by the print node. Check the physical labels before reprinting.`);
     } catch (error) {
