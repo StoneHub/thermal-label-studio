@@ -307,6 +307,11 @@ function requireImageCrop(value: unknown, label: string): LabelImageCrop {
     sourceWidth: requirePositive(value.sourceWidth, `${label}.sourceWidth`),
     sourceHeight: requirePositive(value.sourceHeight, `${label}.sourceHeight`),
   };
+  // Crops are whole source pixels. A fractional edge would let print
+  // preparation keep part of a discarded pixel, such as a cut line.
+  for (const [key, number] of Object.entries(crop)) {
+    if (!Number.isInteger(number)) fail("invalid-document", `${label}.${key} must be a whole number of pixels`);
+  }
   if (crop.x + crop.width > crop.sourceWidth || crop.y + crop.height > crop.sourceHeight) {
     fail("invalid-document", `${label} must stay within the source image`);
   }

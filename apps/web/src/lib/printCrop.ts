@@ -20,13 +20,12 @@ async function bakeImageCrop(element: LabelImageElement): Promise<LabelImageElem
   const crop = element.crop;
   if (!crop) return element;
   const image = await loadImage(element.source);
-  const scaleX = image.naturalWidth / crop.sourceWidth;
-  const scaleY = image.naturalHeight / crop.sourceHeight;
-  // Match the editor's outward rounding if the decoded size ever differs.
-  const left = Math.max(0, Math.floor(crop.x * scaleX + 1e-7));
-  const top = Math.max(0, Math.floor(crop.y * scaleY + 1e-7));
-  const right = Math.min(image.naturalWidth, Math.ceil((crop.x + crop.width) * scaleX - 1e-7));
-  const bottom = Math.min(image.naturalHeight, Math.ceil((crop.y + crop.height) * scaleY - 1e-7));
+  if (image.naturalWidth !== crop.sourceWidth || image.naturalHeight !== crop.sourceHeight) {
+    throw new Error("Cropped artwork changed size. Crop it again before printing.");
+  }
+  const { x: left, y: top } = crop;
+  const right = crop.x + crop.width;
+  const bottom = crop.y + crop.height;
   const width = right - left;
   const height = bottom - top;
   if (width <= 0 || height <= 0) throw new Error("The cropped artwork has no pixels to print.");

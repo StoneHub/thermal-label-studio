@@ -51,12 +51,12 @@ const AddRectangleCommandSchema = z.object({
 });
 
 const ImageCropSchema = z.object({
-  x: z.number().nonnegative(),
-  y: z.number().nonnegative(),
-  width: z.number().positive(),
-  height: z.number().positive(),
-  sourceWidth: z.number().positive(),
-  sourceHeight: z.number().positive(),
+  x: z.number().int().nonnegative(),
+  y: z.number().int().nonnegative(),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  sourceWidth: z.number().int().positive(),
+  sourceHeight: z.number().int().positive(),
 }).refine((crop) => crop.x + crop.width <= crop.sourceWidth && crop.y + crop.height <= crop.sourceHeight, {
   message: "Crop must stay within the source image",
 });

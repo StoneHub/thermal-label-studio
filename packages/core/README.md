@@ -12,7 +12,7 @@ pnpm --filter @tls/core build
 
 `LabelImageElement.crop` optionally stores a non-destructive region in original
 image pixels: `{ x, y, width, height, sourceWidth, sourceHeight }`. Positions must
-be finite and nonnegative; dimensions must be finite and positive; the region
+be whole nonnegative pixels; dimensions must be whole positive pixels; the region
 must stay inside the supplied source dimensions. The original raster data URL
 is retained. The caller supplies the decoded source image's dimensions.
 
@@ -21,4 +21,7 @@ is retained. The caller supplies the decoded source image's dimensions.
 `crop` to retain the current region. Existing documents without a crop render as
 before. Both `contain` and `cover` operate on the selected region, with rotation
 still applied around the image frame's center. The shared SVG renderer clips
-both the source region and destination frame for preview and print preparation.
+both the source region and destination frame. Clipping is enough for on-screen
+preview, but a rasterizer may smooth across the clip edge and pull in discarded
+pixels. Anything that rasterizes for print must first copy each crop into its own
+bitmap (the web app's `bakeImageCrops`).

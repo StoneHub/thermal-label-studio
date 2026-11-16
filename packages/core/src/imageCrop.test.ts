@@ -44,6 +44,7 @@ describe("non-destructive image crop", () => {
     { ...crop, x: Infinity }, { ...crop, y: NaN }, { ...crop, width: Infinity },
     { ...crop, height: NaN }, { ...crop, sourceWidth: Infinity }, { ...crop, sourceHeight: NaN },
     { ...crop, x: 500 }, { ...crop, y: 900 }, { ...crop, width: "400" },
+    { ...crop, x: 99.5 }, { ...crop, height: 200.25 }, { ...crop, sourceWidth: 800.5 },
   ])("rejects malformed persisted crop %j", (badCrop) => {
     expect(() => createLabelWorkspace([{ id: "bad", name: "Bad", size: { width: 100, height: 100 }, elements: [{ ...image, crop: badCrop as LabelImageCrop }] }])).toThrow();
   });

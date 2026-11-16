@@ -9,6 +9,8 @@ const CASES = [
   { size: 1000, crop: ['10.3', '10.7', '49.1', '37.3'] },
   { size: 2551, crop: ['10.1', '10.4', '41.3', '48.9'] },
   { size: 1733, crop: ['10.5', '11', '33.5', '45.5'] },
+  // A small source enlarged onto the label leaked on every run before the fix.
+  { size: 200, crop: ['10.3', '10.7', '49.1', '37.3'] },
 ];
 for (const { size, crop } of CASES) test(`pixels just outside the crop never print as edge lines (${size}px, ${crop.join('/')})`, async ({ page }) => {
   const submissions: any[] = [];
@@ -26,8 +28,6 @@ for (const { size, crop } of CASES) test(`pixels just outside the crop never pri
     return route.continue();
   });
   await page.goto('/');
-  // White 1000×1000 page. The kept area is x/y 100..600. Solid black bands
-  // touch it on every side, and a black block sits in its middle.
   // White page, kept area rounded outward to whole source pixels exactly as
   // the editor does. Solid black touches it on every side; a black block
   // sits in its middle.
@@ -72,4 +72,29 @@ for (const { size, crop } of CASES) test(`pixels just outside the crop never pri
   expect(maxX - minX + 1).toBeLessThan(360);
   expect(maxY - minY + 1).toBeLessThan(360);
   expect(errors).toEqual([]);
+});
+
+// Independent of any one rasterizer's smoothing: the bitmap handed to print
+// preparation holds exactly the kept pixels and nothing else.
+test('print preparation receives only the kept pixels', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    const { bakeImageCrops } = await import('/src/lib/printCrop.ts');
+    const canvas = document.createElement('canvas'); canvas.width = 50; canvas.height = 40;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = 'black'; ctx.fillRect(0, 0, 50, 40);
+    ctx.fillStyle = 'white'; ctx.fillRect(7, 5, 21, 13);
+    const source = canvas.toDataURL();
+    const crop = { x: 7, y: 5, width: 21, height: 13, sourceWidth: 50, sourceHeight: 40 };
+    const label = { id: 'd', name: 'd', schemaVersion: 1, revision: 1, size: { width: 800, height: 1200 },
+      elements: [{ id: 'i', type: 'image', x: 0, y: 0, width: 800, height: 1200, source, crop, fit: 'contain' }] };
+    const baked = (await bakeImageCrops(label as any)).elements[0] as any;
+    const image = new Image(); image.src = baked.source; await image.decode();
+    const check = Object.assign(document.createElement('canvas'), { width: image.naturalWidth, height: image.naturalHeight });
+    const c = check.getContext('2d')!; c.drawImage(image, 0, 0);
+    const pixels = c.getImageData(0, 0, check.width, check.height).data;
+    let dark = 0; for (let i = 0; i < pixels.length; i += 4) if (pixels[i] < 255) dark += 1;
+    return { width: image.naturalWidth, height: image.naturalHeight, dark, crop: baked.crop, original: label.elements[0].source === source };
+  });
+  expect(result).toEqual({ width: 21, height: 13, dark: 0, crop: { x: 0, y: 0, width: 21, height: 13, sourceWidth: 21, sourceHeight: 13 }, original: true });
 });
