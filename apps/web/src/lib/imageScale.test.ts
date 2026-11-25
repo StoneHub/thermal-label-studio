@@ -32,6 +32,16 @@ describe("image scale", () => {
     expect(grown.y).toBeGreaterThanOrEqual(0);
   });
 
+  it("keeps the box shape after a quarter turn so Size moves the way it says", () => {
+    // 50%, then rotated right: the box keeps its 400 x 600 shape, now sideways.
+    const turned = { ...qr, x: 200, y: 300, width: 400, height: 600, rotation: 90 as const };
+    expect(imageScalePercent(turned, label)).toBe(75); // 600 dots wide on screen; 800 fit.
+    const bigger = scaleImageToPercent(turned, label, 90);
+    expect(bigger.width / bigger.height).toBeCloseTo(400 / 600, 2);
+    expect(bigger.height).toBe(720); // Grows, never shrinks, when the slider moves up.
+    expect(imageScalePercent({ ...turned, ...bigger }, label)).toBe(90);
+  });
+
   it("measures a square crop framed on the 4x6 label at nearly 4 inches", () => {
     const size = printedCropSize(qr)!;
     expect(size.width).toBeCloseTo(800 / 203.2, 5);

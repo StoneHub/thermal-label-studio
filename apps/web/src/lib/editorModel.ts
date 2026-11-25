@@ -159,26 +159,34 @@ export const resizeImageFromCorner = (
 export const LABEL_DOTS_PER_INCH = 203.2;
 export const MIN_IMAGE_SCALE_PERCENT = 10;
 
-/** Current image size as a percentage of the largest size that fits the label. */
-export const imageScalePercent = (image: LabelImageElement, label: Size): number => {
-  const largest = frameImageToLabel(image, label);
-  return Math.round(Math.min(image.width / largest.width, image.height / largest.height) * 100);
+/** How much the image box could grow, keeping its shape, before it reaches a label edge. */
+const growthToFill = (image: LabelImageElement, label: Size): number => {
+  const quarterTurn = (image.rotation ?? 0) % 180 !== 0;
+  const visualWidth = quarterTurn ? image.height : image.width;
+  const visualHeight = quarterTurn ? image.width : image.height;
+  return Math.min(label.width / visualWidth, label.height / visualHeight);
 };
+
+/** Current image size as a percentage of the largest size that fits the label. */
+export const imageScalePercent = (image: LabelImageElement, label: Size): number => (
+  Math.min(100, Math.round(100 / growthToFill(image, label)))
+);
 
 /**
  * Resize an image about its centre to a percentage of the largest size that
- * fits the label. 100% is the same frame as Fit, so a tight crop prints as
- * large as the label allows.
+ * fits the label, keeping the box's own shape (and so the content's size
+ * within it). 100% touches the label edges, so a tight crop prints as large
+ * as the label allows.
  */
 export const scaleImageToPercent = (
   image: LabelImageElement,
   label: Size,
   percent: number,
 ): ElementGeometry => {
-  const largest = frameImageToLabel(image, label);
   const ratio = clamp(Number.isFinite(percent) ? percent : 100, MIN_IMAGE_SCALE_PERCENT, 100) / 100;
-  const width = Math.max(1, Math.round(largest.width * ratio));
-  const height = Math.max(1, Math.round(largest.height * ratio));
+  const factor = growthToFill(image, label) * ratio;
+  const width = Math.max(1, Math.round(image.width * factor));
+  const height = Math.max(1, Math.round(image.height * factor));
   const centerX = image.x + image.width / 2;
   const centerY = image.y + image.height / 2;
   return constrainImageGeometry({
