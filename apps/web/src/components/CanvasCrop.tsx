@@ -12,6 +12,15 @@ const HANDLES: Array<{ id: CropHandle; name: string; x: number; y: number }> = [
   { id: "se", name: "bottom right", x: 1, y: 1 }, { id: "s", name: "bottom", x: .5, y: 1 },
   { id: "sw", name: "bottom left", x: 0, y: 1 }, { id: "w", name: "left", x: 0, y: .5 },
 ];
+const COMPASS: CropHandle[] = ["n", "ne", "e", "se", "s", "sw", "w", "nw"];
+/** Turn a screen offset back by the clockwise rotation, onto the unturned image. */
+function unturn(point: CropPoint, rotation: number): CropPoint {
+  const radians = -rotation * Math.PI / 180;
+  const cos = Math.round(Math.cos(radians)), sin = Math.round(Math.sin(radians));
+  return { x: point.x * cos - point.y * sin, y: point.x * sin + point.y * cos };
+}
+/** The screen direction a handle faces once the image is turned, for its resize cursor. */
+const turnedHandle = (handle: CropHandle, rotation: number) => COMPASS[(COMPASS.indexOf(handle) + rotation / 45) % 8];
 type Gesture = { pointerId: number; start: CropPoint; original: CropRect; mode: "draw" | "move" | CropHandle };
 type Rotation = NonNullable<LabelImageElement["rotation"]>;
 interface Props {
@@ -83,9 +92,15 @@ export function CanvasCrop({ image, paper, onCancel, onApply }: Props) {
     }
   };
 
+  /**
+   * Where a pointer is on the original image, from 0 to 1. The surface is drawn
+   * turned by the chosen rotation, so the pointer is turned back about its center.
+   */
   const point = (event: React.PointerEvent): CropPoint => {
-    const rect = surface.current!.getBoundingClientRect();
-    return { x: (event.clientX - rect.left) / rect.width, y: (event.clientY - rect.top) / rect.height };
+    const node = surface.current!;
+    const rect = node.getBoundingClientRect();
+    const { x, y } = unturn({ x: event.clientX - (rect.left + rect.width / 2), y: event.clientY - (rect.top + rect.height / 2) }, rotation);
+    return { x: x / node.offsetWidth + .5, y: y / node.offsetHeight + .5 };
   };
   const nextCrop = (active: Gesture, end: CropPoint) => active.mode === "draw" ? drawCrop(active.start, end)
     : active.mode === "move" ? moveCrop(active.original, { x: end.x - active.start.x, y: end.y - active.start.y })
@@ -123,7 +138,8 @@ export function CanvasCrop({ image, paper, onCancel, onApply }: Props) {
   const adjustWithKeyboard = (event: React.KeyboardEvent, handle?: CropHandle) => {
     const directions: Record<string, CropPoint> = { ArrowLeft: { x: -.005, y: 0 }, ArrowRight: { x: .005, y: 0 },
       ArrowUp: { x: 0, y: -.005 }, ArrowDown: { x: 0, y: .005 } };
-    const delta = directions[event.key];
+    // Arrow keys follow the screen, so they are turned back onto the original image.
+    const delta = directions[event.key] && unturn(directions[event.key], rotation);
     if (!delta) return;
     event.preventDefault(); event.stopPropagation();
     const multiplier = event.shiftKey ? 10 : 1;
@@ -137,8 +153,8 @@ export function CanvasCrop({ image, paper, onCancel, onApply }: Props) {
 
   const overlay = <div className="canvas-crop" role="group" aria-label="Crop image on the label"
     onPointerDown={event => event.stopPropagation()}>
-    <div ref={surface} className={`crop-surface ${drawing ? "is-drawing" : ""}`}
-      style={{ "--crop-aspect": size ? size.width / size.height : 1 } as React.CSSProperties}
+    <div ref={surface} className={`crop-surface ${drawing ? "is-drawing" : ""} ${rotation % 180 ? "is-sideways" : ""}`}
+      style={{ "--crop-aspect": size ? size.width / size.height : 1, "--crop-turn": `${rotation}deg` } as React.CSSProperties}
       onPointerDown={startGesture} onPointerMove={event => updateGesture(event)} onPointerUp={event => updateGesture(event, true)}
       onPointerCancel={cancelGesture} onLostPointerCapture={cancelGesture}>
       <img src={image.source} alt="Original image to crop" draggable={false}
@@ -150,7 +166,7 @@ export function CanvasCrop({ image, paper, onCancel, onApply }: Props) {
           tabIndex={0} role="group" aria-label="Area to keep. Use arrow keys to move." onKeyDown={event => adjustWithKeyboard(event)}>
           <span className="crop-keep">Keep</span>
           {HANDLES.map(handle => <button key={handle.id} type="button" className="crop-handle" data-crop-handle={handle.id}
-            style={{ left: `${handle.x * 100}%`, top: `${handle.y * 100}%`, cursor: `${handle.id}-resize` }}
+            style={{ left: `${handle.x * 100}%`, top: `${handle.y * 100}%`, cursor: `${turnedHandle(handle.id, rotation)}-resize` }}
             aria-label={`Adjust crop ${handle.name}`} onKeyDown={event => adjustWithKeyboard(event, handle.id)} />)}
         </div></>}
     </div>

@@ -135,3 +135,37 @@ test('touch crop on the canvas applies to the image and keeps other content', as
   expect(mock.errors).toEqual([]);
   expect(mock.submissions).toHaveLength(0);
 });
+
+test('Rotate turns the image on the canvas right away, and dragging follows the turned picture', async ({ page }) => {
+  const mock = await setup(page);
+  await page.getByRole('button', { name: 'Crop', exact: true }).click();
+  const surface = page.locator('.crop-surface');
+  await expect(page.locator('.crop-selection')).toBeVisible();
+  const upright = (await surface.boundingBox())!;
+  expect(upright.height).toBeGreaterThan(upright.width); // The 600 x 800 page stands upright.
+  await page.getByRole('button', { name: 'Rotate label, now 0°' }).click();
+  await expect(page.getByRole('button', { name: 'Rotate label, now 90°' })).toBeVisible();
+  // The preview turns at once: the page now lies on its side on the canvas.
+  await expect.poll(async () => { const box = (await surface.boundingBox())!; return box.width > box.height; }).toBe(true);
+  const box = (await surface.boundingBox())!;
+  // Drag across the turned picture. Turned clockwise, screen (x, y) shows image (y, 1 - x).
+  await page.mouse.move(box.x + box.width * .1, box.y + box.height * .1);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * .9, box.y + box.height * .45, { steps: 8 });
+  await page.mouse.up();
+  await page.getByText('Fine-tune with numbers', { exact: true }).click();
+  const value = async (name: string) => Number(await page.getByLabel(name, { exact: true }).inputValue());
+  expect(await value('Left (%)')).toBeCloseTo(10, 0);
+  expect(await value('Width (%)')).toBeCloseTo(35, 0);
+  expect(await value('Top (%)')).toBeCloseTo(10, 0);
+  expect(await value('Height (%)')).toBeCloseTo(80, 0);
+  // Arrow keys move the box the way the screen shows: right on screen is down the original page.
+  await page.locator('.crop-selection').focus();
+  const topBefore = await page.getByLabel('Top (%)', { exact: true }).inputValue();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByLabel('Top (%)', { exact: true })).not.toHaveValue(topBefore);
+  expect(await value('Left (%)')).toBeCloseTo(10, 0);
+  await page.getByRole('button', { name: 'Use crop', exact: true }).click();
+  await expect(page.getByRole('toolbar', { name: 'Crop tools' })).not.toBeVisible();
+  expect(mock.errors).toEqual([]);
+});
