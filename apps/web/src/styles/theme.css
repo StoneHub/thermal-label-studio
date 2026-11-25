@@ -153,13 +153,16 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 .paper-frame.is-cropping { width: min(calc(100vw - 24px), calc((100dvh - 215px) * 2 / 3)); }
 .canvas-column:has(.canvas-crop-bar) .canvas-stage.has-pages { --label-width: min(calc(100vw - 80px), calc((100dvh - 300px) * 2 / 3)); }
 .canvas-crop { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; background: #fff; }
-.canvas-crop .crop-surface { position: relative; width: min(100%, calc(150% * var(--crop-aspect))); aspect-ratio: var(--crop-aspect); touch-action: none; user-select: none; -webkit-user-select: none; }
+/* The surface shows the original image turned by the chosen rotation, so Rotate previews right away.
+   Turned sideways, its width fits the label's height and its height the label's width. */
+.canvas-crop .crop-surface { position: absolute; top: 50%; left: 50%; width: min(100%, calc(150% * var(--crop-aspect))); aspect-ratio: var(--crop-aspect); transform: translate(-50%, -50%) rotate(var(--crop-turn, 0deg)); touch-action: none; user-select: none; -webkit-user-select: none; }
+.canvas-crop .crop-surface.is-sideways { width: min(150%, calc(100% * var(--crop-aspect))); }
 .crop-surface img { display: block; width: 100%; height: 100%; pointer-events: none; }
 .crop-surface.is-drawing { cursor: crosshair; }
 .crop-shade { position: absolute; inset: 0; width: 100%; height: 100%; fill: rgba(20,30,40,.62); pointer-events: none; }
 .crop-selection { position: absolute; border: 2px solid var(--accent); cursor: move; }
 .is-drawing .crop-selection { cursor: crosshair; }
-.crop-keep { position: absolute; bottom: 5px; left: 5px; max-width: calc(100% - 10px); padding: 3px 5px; border-radius: 4px; color: white; background: var(--accent-dark); font-size: 10px; white-space: nowrap; overflow: hidden; pointer-events: none; }
+.crop-keep { position: absolute; bottom: 5px; left: 5px; max-width: calc(100% - 10px); padding: 3px 5px; border-radius: 4px; color: white; background: var(--accent-dark); font-size: 10px; white-space: nowrap; overflow: hidden; pointer-events: none; transform: rotate(calc(-1 * var(--crop-turn, 0deg))); }
 .crop-handle { position: absolute; z-index: 1; width: 40px; height: 40px; padding: 0; transform: translate(-50%,-50%); border: 0; border-radius: 8px; background: transparent; touch-action: none; }
 .crop-handle::after { content: ""; display: block; width: 13px; height: 13px; margin: auto; border: 2px solid var(--accent-dark); border-radius: 3px; background: white; box-shadow: 0 1px 4px #0004; }
 .crop-handle:focus-visible, .crop-selection:focus-visible { outline: 3px solid #2163ba; outline-offset: 2px; }

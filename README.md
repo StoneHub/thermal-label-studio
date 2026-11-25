@@ -96,7 +96,7 @@ the crop tools take the place of the bottom bar.
 1. Drag a box around the shipping label, leaving its barcodes and white margins intact.
 2. Drag the box to move it or use its edge/corner handles to adjust it. Fine-tune
    with numbers or keyboard arrows if preferred. Shaded content is removed.
-3. **Find label or QR** boxes the shipping label and turns it upright for you (or boxes a QR code with its quiet zone). Use **Rotate** if a label still reads sideways.
+3. **Find label or QR** boxes the shipping label and turns it upright for you (or boxes a QR code with its quiet zone). Use **Rotate** if a label still reads sideways; the picture turns on the canvas right away, so you see it before **Use crop**.
 4. Choose **Use crop**. The whole selected area fits on the label without another
    automatic crop. Review it before printing.
 
