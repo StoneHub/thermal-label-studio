@@ -29,12 +29,11 @@ def code128(data, module_px, height_px):
 label = Image.new("L", (4 * DPI, 6 * DPI), 255)
 d = ImageDraw.Draw(label)
 W, H = label.size
-d.rectangle([2, 2, W - 3, H - 3], outline=0, width=2)
+# Like Amazon's UPS return labels: no outer border, and the address block stands apart in white space.
 d.text((14, 12), "EXAMPLE CUSTOMER\n100 SAMPLE ROAD\nSPRINGFIELD ZZ 00000", font=font(13), fill=0)
 d.text((W - 120, 12), "2.0 LBS   1 OF 1", font=bold(13), fill=0)
 d.text((14, 90), "SHIP\nTO:", font=bold(18), fill=0)
 d.text((80, 92), "EXAMPLE RETURNS CENTER\n200 DEMO AVENUE\nTESTVILLE ZZ 99999", font=bold(15), fill=0)
-d.line([0, 175, W, 175], fill=0, width=2)
 # Fake MaxiCode: random dots around a bullseye.
 mx, my = 18, 190
 for _ in range(900):
@@ -75,14 +74,20 @@ for line in ["Make sure no other tracking labels are on your package.",
 y += 14
 p.text((72, y), "Return Mailing Label", font=bold(17), fill=0); y += 28
 p.text((72, y), "Cut this label and affix to the outside of the return package", font=font(15), fill=0); y += 34
+# The cut box is gray (128) dashes, about 2 px thick, on all four sides.
 def dashed(yy):
-    for x in range(72, PW - 72, 12):
-        p.line([x, yy, x + 6, yy], fill=0, width=1)
+    for x in range(56, PW - 56, 15):
+        p.line([x, yy, x + 9, yy + 1], fill=128, width=2)
+def dashed_side(xx, y0, y1):
+    for yy in range(y0, y1, 15):
+        p.line([xx, yy, xx, min(y1, yy + 9)], fill=128, width=2)
 dashed(y); top = y
 turned = label.rotate(90, expand=True, fillcolor=255)   # reads bottom to top
 page.paste(turned, ((PW - turned.width) // 2, top + 14))
 y = top + 14 + turned.height + 14
-dashed(y); y += 24
+dashed(y)
+dashed_side(56, top, y); dashed_side(PW - 58, top, y)
+y += 24
 p.text((72, y), "Return Authorization Slip", font=bold(17), fill=0); y += 30
 p.text((72, y), "Place this barcode and item description inside your return package.", font=font(15), fill=0); y += 34
 page.paste(code128("RMA0001TEST", 2, 60), (72, y)); y += 80

@@ -47,10 +47,11 @@ test('Find label or QR boxes a sideways shipping label, stands it upright and pr
     .toContainText('with 3 bar codes. Turned it 90° so it reads upright.');
   await expect(page.getByRole('button', { name: 'Rotate label, now 90°' })).toBeVisible();
   await page.getByText('Fine-tune with numbers', { exact: true }).click();
-  // The label sits at x 180-1044, y 438-1014 of the 1224 x 1584 page; the box adds a thin margin.
+  // The label's ink sits at about x 195-1017, y 438-1014 of the 1224 x 1584 page, inside the dashed cut box;
+  // the address block on the left stands apart from the bar codes and must be kept. The box adds a thin margin.
   const value = async (name: string) => Number(await page.getByLabel(name, { exact: true }).inputValue());
-  expect(await value('Left (%)')).toBeGreaterThan(13); expect(await value('Left (%)')).toBeLessThan(14.8);
-  expect(await value('Width (%)')).toBeGreaterThan(70.5); expect(await value('Width (%)')).toBeLessThan(73.5);
+  expect(await value('Left (%)')).toBeGreaterThan(14.5); expect(await value('Left (%)')).toBeLessThan(16);
+  expect(await value('Width (%)')).toBeGreaterThan(67.5); expect(await value('Width (%)')).toBeLessThan(70.5);
   expect(await value('Top (%)')).toBeGreaterThan(26.5); expect(await value('Top (%)')).toBeLessThan(27.7);
   expect(await value('Height (%)')).toBeGreaterThan(36.3); expect(await value('Height (%)')).toBeLessThan(38.5);
   await page.getByRole('button', { name: 'Use crop', exact: true }).click();

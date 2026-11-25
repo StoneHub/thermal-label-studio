@@ -36,6 +36,19 @@ describe("shipping label crop", () => {
     [100 - margin, 130 - margin, 500 + margin, 370 + margin].forEach((expected, index) => expect(Math.abs(edges[index] - expected)).toBeLessThanOrEqual(2));
   });
 
+  it("keeps everything inside a dashed cut box, even an address block apart from the bar codes", () => {
+    const { gray, fill, dashes } = page();
+    const side = (x: number) => { for (let y = 101; y < 400; y += 12) fill(x, y, x + 1, y + 6); };
+    dashes(100); dashes(400); side(40); side(W - 41);
+    fill(70, 150, 90, 350); // address lines, far from the bar codes
+    fill(300, 160, 380, 340); fill(420, 160, 460, 340); // bar codes
+    const found = locateShippingLabel(gray, W, H, [bar(300, 160, 380, 340), bar(420, 160, 460, 340)])!;
+    const margin = Math.round(H * .006);
+    expect(found.crop.x * W).toBeCloseTo(70 - margin, 0);
+    expect((found.crop.x + found.crop.width) * W).toBeCloseTo(460 + margin, 0);
+    expect(found.crop.y * H).toBeCloseTo(150 - margin, 0);
+  });
+
   it("finds dashed cut lines but not lines of text", () => {
     const { gray, dashes, text } = page();
     text(30); dashes(100); text(200);

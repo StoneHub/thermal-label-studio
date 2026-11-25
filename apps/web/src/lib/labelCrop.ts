@@ -29,10 +29,12 @@ const INK = 160;
  *
  * Shipping labels are the part of a page that holds bar codes, so the search
  * starts from the bar codes a decoder found. Return pages often fence the label
- * with dashed cut lines; those split the page into regions and the label is the
- * region holding the most bar code area. Inside that region the label is the
- * connected block of ink around the bar codes, which skips white margins and
- * text that sits apart from it. The decoder reports which way each bar code
+ * with a dashed cut box: dashed rows split the page into bands, the label's band
+ * is the one holding the most bar code area, and dashed columns inside that band
+ * close the box. A label fenced by cut lines is everything inside them, because
+ * its address block can sit apart from the bar codes in white space. Without cut
+ * lines the label is the connected block of ink around the bar codes, which
+ * skips white margins and text that sits apart from it. The decoder reports which way each bar code
  * reads, and a label's bar codes read the same way as its text, so a weighted
  * vote gives the turn. Without that, a landscape box on a portrait 4x6 label
  * is most likely a quarter turn.
@@ -41,10 +43,18 @@ export function locateShippingLabel(gray: Uint8Array, width: number, height: num
   const linear = hits.filter(hit => hit.linear && hit.box.right > hit.box.left && hit.box.bottom > hit.box.top);
   if (!linear.length || width < 8 || height < 8) return null;
   const rows = findDashedLines(gray, width, height, "rows");
-  const columns = findDashedLines(gray, width, height, "columns");
-  const region = bestRegion(splits(rows, height), splits(columns, width), linear);
+  const band = bestRegion(splits(rows, height), [[0, width]], linear);
+  // Cut boxes have short sides, so dashed columns are measured within the band.
+  const columns = findDashedLines(gray, width, height, "columns", band);
+  const region = bestRegion([[band.top, band.bottom]], splits(columns, width), linear);
   const anchors = linear.filter(hit => inside(center(hit.box), region));
-  const block = inkBlock(gray, width, height, region, anchors, new Set(rows), new Set(columns));
+  // Cut lines are left out of the label, with a couple of pixels either side for their soft edges.
+  const widen = (lines: number[]) => new Set(lines.flatMap(line => [line - 2, line - 1, line, line + 1, line + 2]));
+  const skipRows = widen(rows), skipColumns = widen(columns);
+  const fenced = region.top > 0 && region.bottom < height;
+  const block = fenced
+    ? inkBounds(gray, width, cutSpan(gray, width, region), skipRows, skipColumns) ?? inkBlock(gray, width, height, region, anchors, skipRows, skipColumns)
+    : inkBlock(gray, width, height, region, anchors, skipRows, skipColumns);
   const margin = Math.max(2, Math.round(Math.max(width, height) * .006));
   const box = {
     left: Math.max(region.left, block.left - margin), top: Math.max(region.top, block.top - margin),
@@ -61,15 +71,20 @@ export function locateShippingLabel(gray: Uint8Array, width: number, height: num
 }
 
 /**
- * Rows (or columns) that form a thin dashed line across most of the page.
- * Text lines also break into many short runs, so a dashed line must also be
- * thin, with clear space on both sides, and its dashes must be short and even.
+ * Rows (or columns) that form a thin dashed line across most of the area
+ * (the whole page unless given). Text lines also break into many short runs,
+ * so a dashed line must also be thin, with clear space on both sides, and its
+ * dashes and gaps must be short and even. Returns page coordinates.
  */
-export function findDashedLines(gray: Uint8Array, width: number, height: number, axis: "rows" | "columns"): number[] {
-  const length = axis === "rows" ? width : height;
-  const count = axis === "rows" ? height : width;
-  const at = axis === "rows" ? (line: number, index: number) => gray[line * width + index]
-    : (line: number, index: number) => gray[index * width + line];
+export function findDashedLines(gray: Uint8Array, width: number, height: number, axis: "rows" | "columns",
+  area: PixelBox = { left: 0, top: 0, right: width, bottom: height }): number[] {
+  const rowsAxis = axis === "rows";
+  const length = rowsAxis ? area.right - area.left : area.bottom - area.top;
+  const count = rowsAxis ? area.bottom - area.top : area.right - area.left;
+  const offset = rowsAxis ? area.top : area.left;
+  if (length < 1 || count < 1) return [];
+  const at = rowsAxis ? (line: number, index: number) => gray[(area.top + line) * width + area.left + index]
+    : (line: number, index: number) => gray[(area.top + index) * width + area.left + line];
   const ink = new Int32Array(count);
   const dashed = new Uint8Array(count);
   for (let line = 0; line < count; line += 1) {
@@ -105,7 +120,7 @@ export function findDashedLines(gray: Uint8Array, width: number, height: number,
     const peak = Math.max(...ink.subarray(start, end + 1));
     const quiet = (line: number) => line < 0 || line >= count || ink[line] < peak * .2;
     if (end - start + 1 <= thin && quiet(before) && quiet(after)) {
-      for (let line = start; line <= end; line += 1) lines.push(line);
+      for (let line = start; line <= end; line += 1) lines.push(offset + line);
     }
     start = end + 1;
   }
@@ -139,6 +154,33 @@ function bestRegion(rows: Array<[number, number]>, columns: Array<[number, numbe
     if (area > bestArea) { best = region; bestArea = area; }
   }
   return best;
+}
+
+/** The left and right ends of the dashed rows just above and below a fenced region, as the area to search. */
+function cutSpan(gray: Uint8Array, width: number, region: PixelBox): PixelBox {
+  let left = region.right, right = region.left;
+  for (const y of [region.top - 1, region.bottom]) {
+    for (let x = region.left; x < region.right; x += 1) {
+      if (gray[y * width + x] < INK) { left = Math.min(left, x); right = Math.max(right, x + 1); }
+    }
+  }
+  return right > left ? { ...region, left, right } : region;
+}
+
+/** The bounding box of all ink in an area, leaving out cut lines. */
+function inkBounds(gray: Uint8Array, width: number, area: PixelBox, skipRows: Set<number>, skipColumns: Set<number>): PixelBox | null {
+  let left = area.right, right = area.left, top = area.bottom, bottom = area.top;
+  for (let y = area.top; y < area.bottom; y += 1) {
+    if (skipRows.has(y)) continue;
+    for (let x = area.left; x < area.right; x += 1) {
+      if (skipColumns.has(x) || gray[y * width + x] >= INK) continue;
+      if (x < left) left = x;
+      if (x >= right) right = x + 1;
+      if (y < top) top = y;
+      bottom = y + 1;
+    }
+  }
+  return right > left ? { left, top, right, bottom } : null;
 }
 
 /**
