@@ -74,6 +74,8 @@ test('crop preview and print use only the kept area; reset, cancel, undo and rot
 test('drag crop, move, resize and interruption stay bounded on a phone', async ({ page }) => {
   const mock = await setup(page);
   await page.getByRole('button', { name: 'Crop', exact: true }).click();
+  // The surface takes the image's shape once the original loads; measure it after that.
+  await expect(page.locator('.crop-selection')).toBeVisible();
   const box = (await page.locator('.crop-surface').boundingBox())!;
   await page.mouse.move(box.x + box.width * .1, box.y + box.height * .1);
   await page.mouse.down();
@@ -111,6 +113,8 @@ test('touch crop on the canvas applies to the image and keeps other content', as
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await page.locator('.paper-svg image').click({ position: { x: 10, y: 10 } });
   await page.getByRole('button', { name: 'Crop', exact: true }).click();
+  // The surface takes the image's shape once the original loads; measure it after that.
+  await expect(page.locator('.crop-selection')).toBeVisible();
   const box = (await page.locator('.crop-surface').boundingBox())!;
   const cdp = await context.newCDPSession(page);
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: box.x + box.width * .1, y: box.y + box.height * .1 }] });
