@@ -123,8 +123,10 @@ test('touch crop on the canvas applies to the image and keeps other content', as
   // The label comes back with the crop applied and the text untouched.
   const label = await page.locator('.paper-svg').innerHTML();
   // 10%-90% x 10%-45% of 600 x 800, rounded outward; touch points land on whole screen pixels.
-  const viewBox = label.match(/viewBox="(\d+) (\d+) (\d+) (\d+)"/g)!.map(text => text.match(/\d+/g)!.map(Number)).find(([, , w]) => w < 600)!;
-  [60, 80, 480, 280].forEach((expected, index) => expect(Math.abs(viewBox[index] - expected)).toBeLessThanOrEqual(2));
+  const expected = [60, 80, 480, 280];
+  const viewBoxes = [...label.matchAll(/viewBox="(\d+) (\d+) (\d+) (\d+)"/g)].map(match => match.slice(1).map(Number));
+  const closest = Math.min(...viewBoxes.map(box => Math.max(...box.map((value, index) => Math.abs(value - expected[index])))));
+  expect(closest, `crop viewBox near ${expected.join(' ')} in ${JSON.stringify(viewBoxes)}`).toBeLessThanOrEqual(2);
   expect(label).toContain('Wide WWW letters');
   expect(mock.errors).toEqual([]);
   expect(mock.submissions).toHaveLength(0);
