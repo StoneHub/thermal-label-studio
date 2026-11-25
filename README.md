@@ -27,7 +27,8 @@ The production web build uses relative assets and system fonts. It can be served
 
 ## Editing and printing
 
-- To blow up a QR code from a screenshot, choose Crop, then Find QR code. The crop keeps the white quiet zone scanners need, and Use crop scales it to the largest size the label allows. Controls → Size shrinks it again (the panel shows the printed size in inches).
+- To cut the shipping label out of a return PDF, choose Crop, then **Find label or QR**. It boxes the block of the page around the label's bar codes (staying inside dashed cut lines) and turns it upright using the direction the bar codes read. PDF pages import at 216 dpi, just above the printer's 203 dpi, so the bars print at full sharpness.
+- To blow up a QR code from a screenshot, choose Crop, then Find label or QR. With no bar codes on the page it finds the QR code, and the crop keeps the white quiet zone scanners need, and Use crop scales it to the largest size the label allows. Controls → Size shrinks it again (the panel shows the printed size in inches).
 
 - Undo and redo up to 40 edits using the toolbar or Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z. Framing and rotation each count as one edit. Edit history lasts for the current browser session.
 - The printer connection bar checks the fixed Pi adapter when the editor opens. Refresh it after reconnecting the Pi or printer. Printing checks readiness again before preparing a label.
@@ -95,7 +96,7 @@ the crop tools take the place of the bottom bar.
 1. Drag a box around the shipping label, leaving its barcodes and white margins intact.
 2. Drag the box to move it or use its edge/corner handles to adjust it. Fine-tune
    with numbers or keyboard arrows if preferred. Shaded content is removed.
-3. Use **Rotate** if the shipping label is sideways, or **Find QR code** to box a QR code with its quiet zone.
+3. **Find label or QR** boxes the shipping label and turns it upright for you (or boxes a QR code with its quiet zone). Use **Rotate** if a label still reads sideways.
 4. Choose **Use crop**. The whole selected area fits on the label without another
    automatic crop. Review it before printing.
 

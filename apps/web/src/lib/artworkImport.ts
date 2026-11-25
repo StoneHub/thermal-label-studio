@@ -57,6 +57,7 @@ const PDF_EXTENSIONS = new Set(["pdf"]);
 
 const FILE_ACCEPT_HINT = "PNG, JPEG, WebP, GIF, SVG, or PDF";
 const MAX_RASTER_DIMENSION = 4096;
+const PDF_RENDER_SCALE = 3;
 // Render sequentially and cap both decoded pixels and retained PNG strings.
 // A page count alone does not bound memory for large or noisy PDF pages.
 const MAX_PDF_PAGES = 50;
@@ -292,7 +293,9 @@ const rasterizePdfPages = async (
         const baseViewport = page.getViewport({ scale: 1 });
         requireSize(baseViewport, "PDF page");
         const maxDimension = Math.max(baseViewport.width, baseViewport.height);
-        const scale = Math.min(2, MAX_RASTER_DIMENSION / maxDimension);
+        // 3x is 216 dpi, just above the printer's 203 dpi, so a label cut from a
+        // page prints its bars at full sharpness instead of being enlarged.
+        const scale = Math.min(PDF_RENDER_SCALE, MAX_RASTER_DIMENSION / maxDimension);
         const viewport = page.getViewport({ scale });
         requireSize(viewport, "PDF page");
         const width = Math.max(1, Math.ceil(viewport.width));
