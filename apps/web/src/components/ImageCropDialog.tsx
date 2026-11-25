@@ -3,6 +3,7 @@ import { renderLabelDocument, type LabelDocument, type LabelImageCrop, type Labe
 import { frameImageToLabel } from "../lib/editorModel";
 import { cropFromPixels, cropToPixels, drawCrop, FULL_CROP, moveCrop, normalizeCrop, resizeCrop,
   type CropHandle, type CropPoint, type CropRect } from "../lib/imageCrop";
+import { findQrCode } from "../lib/qrCrop";
 
 const HANDLES: Array<{ id: CropHandle; name: string; x: number; y: number }> = [
   { id: "nw", name: "top left", x: 0, y: 0 }, { id: "n", name: "top", x: .5, y: 0 },
@@ -28,6 +29,23 @@ export function ImageCropDialog({ document, image, measureText, onCancel, onAppl
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   const [error, setError] = useState("");
   const [rotation, setRotation] = useState<NonNullable<LabelImageElement["rotation"]>>(image.rotation ?? 0);
+  const [qrState, setQrState] = useState<{ busy: boolean; message: string }>({ busy: false, message: "" });
+  const findQr = async () => {
+    setQrState({ busy: true, message: "Looking for a QR code…" });
+    try {
+      const found = await findQrCode(image.source);
+      if (!found) {
+        setQrState({ busy: false, message: "No QR code found. Draw a box around it instead." });
+        return;
+      }
+      setCrop(found.crop);
+      setDrawing(false);
+      const sample = found.data.length > 48 ? `${found.data.slice(0, 48)}…` : found.data;
+      setQrState({ busy: false, message: `Found a QR code${sample ? ` (reads “${sample}”)` : ""}. The box keeps the white border scanners need.` });
+    } catch {
+      setQrState({ busy: false, message: "This image could not be checked for a QR code." });
+    }
+  };
 
   useEffect(() => {
     const node = dialog.current;
@@ -106,7 +124,9 @@ export function ImageCropDialog({ document, image, measureText, onCancel, onAppl
     <div className="crop-heading"><h2 id="crop-title">Crop to the label</h2><button className="button button-quiet" onClick={onCancel}>Cancel</button></div>
     <p id="crop-help" className="crop-help">Drag a box around the label. Adjust the handles or move the box. Shaded areas will be removed.</p>
     <div className="crop-tools"><button className={`button ${drawing ? "button-primary" : ""}`} aria-pressed={drawing} onClick={() => setDrawing(true)}>Draw new box</button>
+      <button className="button" onClick={() => { void findQr(); }} disabled={!size || qrState.busy}>{qrState.busy ? "Finding…" : "Find QR code"}</button>
       <button className="button" onClick={() => { setCrop(FULL_CROP); setDrawing(true); }}>Reset to full page</button></div>
+    {qrState.message && <p className="crop-help" role="status">{qrState.message}</p>}
     {error && <p role="alert">{error}</p>}
     <div className="crop-workspace">
       <div className="crop-stage"><div ref={surface} className={`crop-surface ${drawing ? "is-drawing" : ""}`}

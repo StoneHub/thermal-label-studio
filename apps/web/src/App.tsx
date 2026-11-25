@@ -12,6 +12,7 @@ import {
 } from "@tls/core";
 import type { LabelTextMeasure } from "@tls/core";
 import { ImageCropDialog } from "./components/ImageCropDialog";
+import { ImageSizeControl } from "./components/ImageSizeControl";
 import { importArtworkPages } from "./lib/artworkImport";
 import { documentFromArtwork } from "./lib/documentPages";
 import { submitPrintBatch } from "./lib/printBatch";
@@ -25,8 +26,10 @@ import {
 import {
   constrainImageGeometry,
   frameImageToLabel,
+  imageScalePercent,
   initialDocument,
   resizeImageFromCorner,
+  scaleImageToPercent,
   withElementGeometry,
   type ElementGeometry,
   type ResizeCorner,
@@ -112,6 +115,7 @@ const App: React.FC = () => {
   const [artworkHistory, setArtworkHistory] = useState<ArtworkHistoryItem[]>([]);
   const [historyLoadingId, setHistoryLoadingId] = useState<string | null>(null);
   const [cropImage, setCropImage] = useState<LabelImageElement | null>(null);
+  const [scaleDraft, setScaleDraft] = useState<{ elementId: string; percent: number } | null>(null);
   const [activePanel, setActivePanel] = useState<FlyoutPanel | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
@@ -359,6 +363,16 @@ const App: React.FC = () => {
     ])) return;
     showStatus(fit === "cover" ? "Image fills the label" : "Whole image fitted to the label");
   }, [apply, document.id, document.size, selected, showStatus]);
+  const commitScale = useCallback((percent?: number) => {
+    const draft = percent === undefined ? scaleDraft : selected ? { elementId: selected.id, percent } : null;
+    setScaleDraft(null);
+    if (!draft || !selected || selected.type !== "image" || selected.id !== draft.elementId) return;
+    const geometry = scaleImageToPercent(selected, document.size, draft.percent);
+    if (geometry.x === selected.x && geometry.y === selected.y && geometry.width === selected.width && geometry.height === selected.height) return;
+    if (apply({ type: "resize-element", documentId: document.id, elementId: selected.id, ...geometry })) {
+      showStatus(`Image size ${imageScalePercent({ ...selected, ...geometry }, document.size)}%`);
+    }
+  }, [apply, document.id, document.size, scaleDraft, selected, showStatus]);
   const rotateImage = useCallback((direction: -1 | 1) => {
     if (!selected || selected.type !== "image") return;
     const turns = [0, 90, 180, 270] as const;
@@ -503,6 +517,10 @@ const App: React.FC = () => {
   }, [addFiles, copiedId, cropImage, pasteSelected, selectedId]);
 
   const previewDocument = useMemo(() => {
+    const scaling = scaleDraft && document.elements.find((element) => element.id === scaleDraft.elementId);
+    if (scaleDraft && scaling?.type === "image") {
+      return withElementGeometry(document, scaling.id, scaleImageToPercent(scaling, document.size, scaleDraft.percent));
+    }
     if (resize && resizePreview) {
       return withElementGeometry(document, resize.element.id, resizePreview);
     }
@@ -522,7 +540,7 @@ const App: React.FC = () => {
       });
     }
     return document;
-  }, [document, drag, dragOffset, resize, resizePreview]);
+  }, [document, drag, dragOffset, resize, resizePreview, scaleDraft]);
   const draftPreviewDocument = useMemo(() => {
     if (!hasUnappliedTextDraft || !selected || selected.type !== "text") return previewDocument;
     return {
@@ -660,7 +678,7 @@ const App: React.FC = () => {
         <div className="flyout-topline"><strong>{activePanel === "edit" ? "Edit" : activePanel === "layers" ? "Layers" : activePanel === "uploads" ? "Uploads" : "Printer"}</strong><button className="button button-quiet" type="button" onClick={() => { editText(); setActivePanel(null); }} data-flyout-autofocus aria-label="Close panel">Close</button></div>
         <nav className="flyout-tabs" aria-label="Workspace panels">{(["edit", "layers", "uploads", "printer"] as FlyoutPanel[]).map((panel) => <button key={panel} className={activePanel === panel ? "active" : ""} type="button" aria-current={activePanel === panel ? "page" : undefined} onClick={() => { editText(); setActivePanel(panel); }}>{panel[0].toUpperCase() + panel.slice(1)}</button>)}</nav>
         <div className="flyout-history-actions" aria-label="History"><button className="button button-quiet" type="button" onClick={() => travelHistory("undo")} disabled={isPrinting || isImporting || !workspace.canUndo}>Undo</button><button className="button button-quiet" type="button" onClick={() => travelHistory("redo")} disabled={isPrinting || isImporting || !workspace.canRedo}>Redo</button></div>
-        {activePanel === "edit" && <div className="flyout-content"><div className="flyout-section-heading"><span>{selected ? `${selected.type[0].toUpperCase()}${selected.type.slice(1)} selected` : "No selection"}</span></div>{selected ? <div className={`properties-content ${selected.type === "text" ? "text-properties-panel" : ""}`}>{selected.type === "text" ? <><label className="field-label" htmlFor="selected-text">Label text</label><textarea ref={textAreaRef} id="selected-text" placeholder="Type your label text…" value={textDraft} onChange={(event) => { textDraftRef.current = event.target.value; setTextDraft(event.target.value); }} onBlur={editText} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") finishTextEdit(); }} /><p className="control-help">Text wraps live. Press Return for a new line.</p><p className="draft-warning" role="status" style={{ visibility: hasUnappliedTextDraft ? "visible" : "hidden" }}>Preview updated. Done commits before printing.</p><button className="button button-primary full-width" type="button" onClick={finishTextEdit}>Done</button></> : selected.type === "image" ? <><p className="empty-copy">Drag to move. Corner handles resize the image. To remove part of the page, choose Crop.</p><button className="button button-primary full-width" type="button" onClick={beginCrop} disabled={isPrinting || isImporting}>Crop image</button><div className="image-controls"><span className="field-label">Framing</span><p className="image-setting-summary">{selected.crop ? selected.fit === "cover" ? "Cropped area fills label (edges may be cut)" : "Shows the entire cropped area" : selected.fit === "cover" ? "Fills label with centered crop" : "Shows the whole image"} · {selected.rotation ?? 0}°</p><div className="property-button-row"><button className="button" type="button" onClick={() => frameImage("contain")}>{selected.crop ? "Fit crop" : "Fit whole"}</button><button className="button" type="button" onClick={() => frameImage("cover")}>Fill label</button><button className="button button-quiet" type="button" onClick={() => rotateImage(-1)}>Rotate left</button><button className="button button-quiet" type="button" onClick={() => rotateImage(1)}>Rotate right</button></div></div></> : <p className="empty-copy">Drag the rectangle on the label to reposition it.</p>}<div className="mobile-secondary-action-row"><button className="button button-quiet" type="button" onClick={copySelected}>Copy</button><button className="button button-quiet" type="button" onClick={pasteSelected} disabled={!copiedId && !selectedId}>Paste</button><button className="button button-quiet" type="button" onClick={() => duplicate(selectedId)}>Duplicate</button><button className="button button-danger" type="button" onClick={removeSelected}>Delete</button></div></div> : <p className="empty-copy">Add text or import artwork from the bottom bar.</p>}</div>}
+        {activePanel === "edit" && <div className="flyout-content"><div className="flyout-section-heading"><span>{selected ? `${selected.type[0].toUpperCase()}${selected.type.slice(1)} selected` : "No selection"}</span></div>{selected ? <div className={`properties-content ${selected.type === "text" ? "text-properties-panel" : ""}`}>{selected.type === "text" ? <><label className="field-label" htmlFor="selected-text">Label text</label><textarea ref={textAreaRef} id="selected-text" placeholder="Type your label text…" value={textDraft} onChange={(event) => { textDraftRef.current = event.target.value; setTextDraft(event.target.value); }} onBlur={editText} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") finishTextEdit(); }} /><p className="control-help">Text wraps live. Press Return for a new line.</p><p className="draft-warning" role="status" style={{ visibility: hasUnappliedTextDraft ? "visible" : "hidden" }}>Preview updated. Done commits before printing.</p><button className="button button-primary full-width" type="button" onClick={finishTextEdit}>Done</button></> : selected.type === "image" ? <><p className="empty-copy">Drag to move. Size or the corner handles scale the image. To blow up one part, such as a QR code, choose Crop first.</p><button className="button button-primary full-width" type="button" onClick={beginCrop} disabled={isPrinting || isImporting}>Crop image</button><div className="image-controls"><span className="field-label">Framing</span><p className="image-setting-summary">{selected.crop ? selected.fit === "cover" ? "Cropped area fills label (edges may be cut)" : "Shows the entire cropped area" : selected.fit === "cover" ? "Fills label with centered crop" : "Shows the whole image"} · {selected.rotation ?? 0}°</p><div className="property-button-row"><button className="button" type="button" onClick={() => frameImage("contain")}>{selected.crop ? "Fit crop" : "Fit whole"}</button><button className="button" type="button" onClick={() => frameImage("cover")}>Fill label</button><button className="button button-quiet" type="button" onClick={() => rotateImage(-1)}>Rotate left</button><button className="button button-quiet" type="button" onClick={() => rotateImage(1)}>Rotate right</button></div></div><ImageSizeControl image={selected} label={document.size} draft={scaleDraft?.elementId === selected.id ? scaleDraft.percent : null} disabled={isPrinting || isImporting} onDraft={(percent) => setScaleDraft({ elementId: selected.id, percent })} onCommit={commitScale} /></> : <p className="empty-copy">Drag the rectangle on the label to reposition it.</p>}<div className="mobile-secondary-action-row"><button className="button button-quiet" type="button" onClick={copySelected}>Copy</button><button className="button button-quiet" type="button" onClick={pasteSelected} disabled={!copiedId && !selectedId}>Paste</button><button className="button button-quiet" type="button" onClick={() => duplicate(selectedId)}>Duplicate</button><button className="button button-danger" type="button" onClick={removeSelected}>Delete</button></div></div> : <p className="empty-copy">Add text or import artwork from the bottom bar.</p>}</div>}
         {activePanel === "layers" && <div className="flyout-content"><div className="layer-list">{elements.map((element, index) => <button className={`layer-row ${selectedId === element.id ? "selected" : ""}`} aria-pressed={selectedId === element.id} type="button" key={element.id} onClick={() => { editText(); setSelectedId(element.id); setActivePanel("edit"); }}><span className="layer-number">{String(index + 1).padStart(2, "0")}</span><span className="layer-label">{element.type === "text" ? element.text || "Empty text" : element.type === "image" ? element.alt || "Image" : "Rectangle"}</span><span className="layer-kind">{element.type}</span></button>)}</div>{elements.length === 0 && <p className="empty-copy">Add text or import artwork from the bottom bar.</p>}</div>}
         {activePanel === "uploads" && <div className="flyout-content">{artworkHistory.length > 0 ? <div className="history-carousel">{artworkHistory.map((item) => <button className="history-card" type="button" key={item.id} onClick={() => { void addFromHistory(item); setActivePanel("edit"); }} disabled={historyLoadingId !== null}>{item.mimeType.startsWith("image/") ? <img src={item.sourceUrl} alt="" loading="lazy" decoding="async" /> : <span className="history-pdf" aria-hidden="true">PDF</span>}<span className="history-name">{item.name}</span>{historyLoadingId === item.id && <span className="history-loading">Loading…</span>}</button>)}</div> : <p className="empty-copy">Your next uploaded image or PDF will appear here.</p>}<button className="button button-primary full-width" type="button" onClick={() => fileInputRef.current?.click()}>Import artwork</button></div>}
         {activePanel === "printer" && <div className="flyout-content"><div className="printer-detail-card"><span className={`printer-indicator ${printer?.ready ? "ready" : ""}`} aria-hidden="true" /><strong>{printer?.ready ? "Printer ready" : printer ? "Printer unavailable" : "Connecting to printer…"}</strong><p>{printer?.detail ?? "Checking the Pi print node."}</p></div><button className="button button-quiet full-width" type="button" onClick={() => { void refreshPrinter(); }} disabled={checkingPrinter || isPrinting}>{checkingPrinter ? "Checking…" : "Refresh status"}</button><p className="control-help">Print submits one guarded label only after the text and bounds checks pass.</p></div>}
