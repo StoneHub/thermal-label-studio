@@ -52,7 +52,7 @@ for (const { size, crop } of CASES) test(`pixels just outside the crop never pri
     await page.getByLabel(label, { exact: true }).fill(value);
   }
   await page.getByRole('button', { name: 'Use crop', exact: true }).click();
-  await expect(page.getByRole('dialog')).not.toBeVisible();
+  await expect(page.getByRole('toolbar', { name: 'Crop tools' })).not.toBeVisible();
   await page.getByRole('button', { name: 'Print', exact: true }).click();
   await expect.poll(() => submissions.length).toBe(1);
 

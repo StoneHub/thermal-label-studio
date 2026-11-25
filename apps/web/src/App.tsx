@@ -5,13 +5,14 @@ import {
   renderLabelDocument,
   wrapLabelText,
   type LabelDocument,
+  type LabelImageCrop,
   type LabelImageElement,
   type LabelTextElement,
   type RenderArtifact,
   type WorkspaceCommand,
 } from "@tls/core";
 import type { LabelTextMeasure } from "@tls/core";
-import { ImageCropDialog } from "./components/ImageCropDialog";
+import { CanvasCrop } from "./components/CanvasCrop";
 import { ImageSizeControl } from "./components/ImageSizeControl";
 import { importArtworkPages } from "./lib/artworkImport";
 import { documentFromArtwork } from "./lib/documentPages";
@@ -121,7 +122,9 @@ const App: React.FC = () => {
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const textDraftRef = useRef("");
   const focusTextOnSelectionRef = useRef<string | null>(null);
-  const paperRef = useRef<HTMLDivElement>(null);
+  const paperRef = useRef<HTMLDivElement | null>(null);
+  const [paperNode, setPaperNode] = useState<HTMLDivElement | null>(null);
+  const attachPaper = useCallback((node: HTMLDivElement | null) => { paperRef.current = node; setPaperNode(node); }, []);
   const flyoutRef = useRef<HTMLElement>(null);
   const lastFocusRef = useRef<HTMLElement | null>(null);
   const statusTimer = useRef<number | undefined>(undefined);
@@ -334,6 +337,8 @@ const App: React.FC = () => {
   const selectPage = useCallback((index: number) => {
     if (printingRef.current || importingRef.current || index < 0 || index >= pagesRef.current.length || index === pageIndexRef.current) return;
     editText();
+    // A crop in progress belongs to this page's image; switching pages cancels it.
+    setCropImage(null);
     const next = pagesRef.current[index].current();
     pageIndexRef.current = index;
     setPageIndex(index);
@@ -373,6 +378,17 @@ const App: React.FC = () => {
       showStatus(`Image size ${imageScalePercent({ ...selected, ...geometry }, document.size)}%`);
     }
   }, [apply, document.id, document.size, scaleDraft, selected, showStatus]);
+  const applyCrop = useCallback((crop: LabelImageCrop | null, rotation: NonNullable<LabelImageElement["rotation"]>) => {
+    if (!cropImage) return;
+    const geometry = frameImageToLabel({ ...cropImage, rotation }, document.size);
+    if (apply([
+      { type: "update-image", documentId: document.id, elementId: cropImage.id, crop, rotation, fit: "contain" },
+      { type: "resize-element", documentId: document.id, elementId: cropImage.id, ...geometry },
+    ])) {
+      setCropImage(null);
+      showStatus("Crop applied. Check all barcodes before printing.");
+    }
+  }, [apply, cropImage, document.id, document.size, showStatus]);
   const rotateImage = useCallback((direction: -1 | 1) => {
     if (!selected || selected.type !== "image") return;
     const turns = [0, 90, 180, 270] as const;
@@ -654,16 +670,6 @@ const App: React.FC = () => {
   } : undefined;
   return (
     <main className="editor-shell">
-      {cropImage && <ImageCropDialog document={document} image={cropImage} measureText={browserTextMeasure} onCancel={() => setCropImage(null)} onApply={(crop, rotation) => {
-        const geometry = frameImageToLabel({ ...cropImage, rotation }, document.size);
-        if (apply([
-          { type: "update-image", documentId: document.id, elementId: cropImage.id, crop, rotation, fit: "contain" },
-          { type: "resize-element", documentId: document.id, elementId: cropImage.id, ...geometry },
-        ])) {
-          setCropImage(null);
-          showStatus("Crop applied. Check all barcodes before printing.");
-        }
-      }} />}
       {isImporting && <div className="import-progress" role="status">Importing pages…</div>}
       <header className="editor-header workspace-header">
         <button className="workspace-menu-button" type="button" onClick={() => setActivePanel("layers")} aria-label="Open workspace menu" aria-expanded={activePanel !== null}>☰</button>
@@ -700,9 +706,9 @@ const App: React.FC = () => {
         <button type="button" className="button button-quiet print-all" onClick={() => { void printPages(true); }} disabled={isPrinting || isImporting || !printer?.ready || printBlocked}>Print all {pageSessions.length} pages…</button>
       </nav>}
       <section className="editor-layout">
-        <section className="canvas-column"><div className="workspace-bottom-bar" aria-label="Quick label actions"><button className="workspace-bottom-button workspace-bottom-primary" type="button" onClick={addText}>Text</button><button className="workspace-bottom-button" type="button" onClick={() => fileInputRef.current?.click()}>Import</button><button className="workspace-bottom-button" type="button" onClick={beginCrop} disabled={!cropTarget || isPrinting || isImporting} title={!cropTarget ? "Select an image to crop" : "Choose the part of the page to keep"}>Crop</button><button className="workspace-bottom-button" type="button" onClick={() => travelHistory("undo")} disabled={isPrinting || isImporting || !workspace.canUndo}>Undo</button><button className="workspace-bottom-button" type="button" onClick={() => setActivePanel("edit")} disabled={!selected}>Controls</button></div><div className={`canvas-stage ${pageSessions.length > 1 ? "has-pages" : ""} ${isDropTarget ? "drop-target" : ""}`} onDragEnter={(event) => { event.preventDefault(); setIsDropTarget(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setIsDropTarget(false)} onDrop={handleDrop}>{isDropTarget && <div className="drop-overlay">Drop image or PDF</div>}{pageIndex > 0 && <button className="page-peek page-peek-left" aria-label="Previous page preview" disabled={isPrinting || isImporting} onClick={() => selectPage(pageIndex - 1)}><span dangerouslySetInnerHTML={{ __html: renderLabelDocument(pageSessions[pageIndex - 1].current()).source }} /></button>}
+        <section className="canvas-column">{cropImage && paperNode ? <CanvasCrop key={cropImage.id} image={cropImage} paper={paperNode} onCancel={() => setCropImage(null)} onApply={applyCrop} /> : <div className="workspace-bottom-bar" aria-label="Quick label actions"><button className="workspace-bottom-button workspace-bottom-primary" type="button" onClick={addText}>Text</button><button className="workspace-bottom-button" type="button" onClick={() => fileInputRef.current?.click()}>Import</button><button className="workspace-bottom-button" type="button" onClick={beginCrop} disabled={!cropTarget || isPrinting || isImporting} title={!cropTarget ? "Select an image to crop" : "Choose the part of the page to keep"}>Crop</button><button className="workspace-bottom-button" type="button" onClick={() => travelHistory("undo")} disabled={isPrinting || isImporting || !workspace.canUndo}>Undo</button><button className="workspace-bottom-button" type="button" onClick={() => setActivePanel("edit")} disabled={!selected}>Controls</button></div>}<div className={`canvas-stage ${pageSessions.length > 1 ? "has-pages" : ""} ${isDropTarget ? "drop-target" : ""}`} onDragEnter={(event) => { event.preventDefault(); setIsDropTarget(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setIsDropTarget(false)} onDrop={handleDrop}>{isDropTarget && <div className="drop-overlay">Drop image or PDF</div>}{pageIndex > 0 && <button className="page-peek page-peek-left" aria-label="Previous page preview" disabled={isPrinting || isImporting} onClick={() => selectPage(pageIndex - 1)}><span dangerouslySetInnerHTML={{ __html: renderLabelDocument(pageSessions[pageIndex - 1].current()).source }} /></button>}
           {pageIndex + 1 < pageSessions.length && <button className="page-peek page-peek-right" aria-label="Next page preview" disabled={isPrinting || isImporting} onClick={() => selectPage(pageIndex + 1)}><span dangerouslySetInnerHTML={{ __html: renderLabelDocument(pageSessions[pageIndex + 1].current()).source }} /></button>}
-          <div ref={paperRef} className="paper-frame" style={{ aspectRatio: `${width} / ${height}` }} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}><div className="paper-svg" dangerouslySetInnerHTML={{ __html: previewArtifact.source }} />{imageSelection && <div className="image-selection" style={selectionStyle} aria-label="Selected image frame">{RESIZE_CORNERS.map(({ corner, name, className }) => <button key={name} className={`resize-handle ${className}`} type="button" aria-label={`Resize from ${name} corner`} onPointerDown={(event) => onResizePointerDown(event, corner)} onPointerMove={onResizePointerMove} onPointerUp={finishResize} onPointerCancel={cancelResize} />)}</div>}</div></div></section>
+          <div ref={attachPaper} className={`paper-frame ${cropImage ? "is-cropping" : ""}`} style={{ aspectRatio: `${width} / ${height}` }} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}><div className="paper-svg" dangerouslySetInnerHTML={{ __html: previewArtifact.source }} />{imageSelection && !cropImage && <div className="image-selection" style={selectionStyle} aria-label="Selected image frame">{RESIZE_CORNERS.map(({ corner, name, className }) => <button key={name} className={`resize-handle ${className}`} type="button" aria-label={`Resize from ${name} corner`} onPointerDown={(event) => onResizePointerDown(event, corner)} onPointerMove={onResizePointerMove} onPointerUp={finishResize} onPointerCancel={cancelResize} />)}</div>}</div></div></section>
       </section>
     </main>
   );

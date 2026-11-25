@@ -146,16 +146,14 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 
 .page-navigation { touch-action: pan-y; }
 
-/* Explicit source cropping is separate from scaling the image on the label. */
-.crop-dialog { width: min(920px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); margin: auto; padding: 18px; border: 1px solid var(--line); border-radius: 16px; color: var(--ink); background: var(--paper); overflow: auto; overscroll-behavior: contain; }
-.crop-dialog::backdrop { background: rgba(25,37,45,.65); }
-.crop-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.crop-heading h2 { margin: 0; font-size: 20px; }
-.crop-help { margin: 10px 0; max-width: 65ch; font-size: 13px; line-height: 1.45; }
-.crop-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
-.crop-workspace { display: grid; grid-template-columns: minmax(0,1fr) 190px; align-items: start; gap: 20px; }
-.crop-stage { min-width: 0; display: grid; place-items: center; padding: 23px; background: var(--canvas); border-radius: 8px; }
-.crop-surface { position: relative; width: min(100%, calc(52dvh * var(--crop-aspect))); aspect-ratio: var(--crop-aspect); touch-action: none; user-select: none; -webkit-user-select: none; }
+/* Cropping happens on the label canvas: the original image is shown whole with the kept area outlined. */
+.paper-frame.is-cropping .paper-svg { visibility: hidden; }
+/* The crop tools are taller than the bottom bar; keep the whole canvas above them. */
+.canvas-column:has(.canvas-crop-bar) .canvas-stage { padding-bottom: 150px; }
+.paper-frame.is-cropping { width: min(calc(100vw - 24px), calc((100dvh - 215px) * 2 / 3)); }
+.canvas-column:has(.canvas-crop-bar) .canvas-stage.has-pages { --label-width: min(calc(100vw - 80px), calc((100dvh - 300px) * 2 / 3)); }
+.canvas-crop { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; background: #fff; }
+.canvas-crop .crop-surface { position: relative; width: min(100%, calc(150% * var(--crop-aspect))); aspect-ratio: var(--crop-aspect); touch-action: none; user-select: none; -webkit-user-select: none; }
 .crop-surface img { display: block; width: 100%; height: 100%; pointer-events: none; }
 .crop-surface.is-drawing { cursor: crosshair; }
 .crop-shade { position: absolute; inset: 0; width: 100%; height: 100%; fill: rgba(20,30,40,.62); pointer-events: none; }
@@ -165,28 +163,18 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 .crop-handle { position: absolute; z-index: 1; width: 40px; height: 40px; padding: 0; transform: translate(-50%,-50%); border: 0; border-radius: 8px; background: transparent; touch-action: none; }
 .crop-handle::after { content: ""; display: block; width: 13px; height: 13px; margin: auto; border: 2px solid var(--accent-dark); border-radius: 3px; background: white; box-shadow: 0 1px 4px #0004; }
 .crop-handle:focus-visible, .crop-selection:focus-visible { outline: 3px solid #2163ba; outline-offset: 2px; }
-.crop-preview-panel { display: grid; gap: 12px; }
-.crop-preview { width: 100%; aspect-ratio: 2 / 3; background: white; box-shadow: 0 2px 7px #19252d22; }
-.crop-preview > svg { width: 100%; height: 100%; display: block; }
-.crop-preview-panel strong { font-size: 13px; }
-.crop-preview-panel .control-help { margin-bottom: 10px; }
-.crop-numbers { margin-top: 12px; font-size: 12px; }
-.crop-numbers summary { padding: 8px 0; cursor: pointer; }
-.crop-numbers > div { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-.crop-numbers input { display: block; margin-top: 4px; padding: 8px; font-size: 16px; }
-.crop-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
-.crop-footer p { margin: 0; max-width: 38ch; font-size: 11px; color: var(--muted); }
-.crop-footer .button { min-width: 100px; }
+.canvas-crop-bar { position: absolute; z-index: 4; right: 12px; bottom: 12px; left: 12px; display: grid; gap: 6px; width: min(560px, calc(100% - 24px)); margin: 0 auto; padding: 8px; border: 1px solid rgba(199,208,205,.9); border-radius: 13px; background: rgba(255,253,250,.96); box-shadow: 0 10px 28px rgba(29,43,49,.13); backdrop-filter: blur(12px); }
+.canvas-crop-message { margin: 0 4px; font-size: 12px; line-height: 1.35; color: var(--muted); }
+.canvas-crop-buttons { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.canvas-crop-buttons .button { min-height: 42px; padding: 6px 4px; font-size: 13px; }
+.crop-numbers { margin: 0 4px; font-size: 12px; }
+.crop-numbers summary { padding: 2px 0; cursor: pointer; color: var(--muted); }
+.crop-numbers > div { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding-top: 6px; }
+.crop-numbers input { display: block; width: 100%; margin-top: 4px; padding: 6px; font-size: 16px; }
+@media (max-width: 720px) {
+  .canvas-crop-bar { right: 8px; bottom: 8px; left: 8px; width: auto; }
+}
 @media (max-width: 600px) {
-  .crop-dialog { width: calc(100vw - 12px); max-height: calc(100dvh - 12px); padding: 12px; border-radius: 10px; }
-  .crop-heading h2 { font-size: 18px; }
-  .crop-workspace { display: block; }
-  .crop-stage { padding: 21px; }
-  .crop-surface { width: min(100%, calc(40dvh * var(--crop-aspect))); }
-  .crop-preview-panel { grid-template-columns: 58px 1fr; align-items: center; gap: 12px; margin-top: 12px; }
-  .crop-preview-panel .control-help { font-size: 11px; margin: 5px 0; }
-  .crop-preview-panel .button { min-height: 36px; padding: 5px 10px; }
-  .crop-footer .button { min-height: 44px; }
   .workspace-bottom-button { padding-right: 3px; padding-left: 3px; }
 }
 .size-control { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; }

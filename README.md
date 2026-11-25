@@ -88,17 +88,18 @@ barcodes, and addresses before printing. Imports allow at most 50 PDF pages,
 ### Crop a shipping label out of a page
 
 Choose **Crop** in the bottom bar (or **Crop image** in Controls). With one image
-on the page, no selection is needed. The crop view always shows the original
-page, even if the editor was using Fill label.
+on the page, no selection is needed. Cropping happens right on the label canvas:
+it shows the whole original page, even if the editor was using Fill label, and
+the crop tools take the place of the bottom bar.
 
 1. Drag a box around the shipping label, leaving its barcodes and white margins intact.
 2. Drag the box to move it or use its edge/corner handles to adjust it. Fine-tune
    with numbers or keyboard arrows if preferred. Shaded content is removed.
-3. Check the label preview. Use **Rotate label** if the shipping label is sideways.
+3. Use **Rotate** if the shipping label is sideways, or **Find QR code** to box a QR code with its quiet zone.
 4. Choose **Use crop**. The whole selected area fits on the label without another
    automatic crop. Review it before printing.
 
-Cancel leaves the label unchanged. Reset to full page removes the crop when
+Cancel (or Escape) leaves the label unchanged. Reset removes the crop when
 applied. The original remains intact; reopen Crop to adjust it, or Undo the
 entire crop/rotation change in one step. Crops belong to their individual pages.
 
