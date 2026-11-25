@@ -54,7 +54,7 @@ test('Find QR code crops to the code and blows it up into a scannable label', as
   await expect(page.getByLabel('Left (%)', { exact: true })).toHaveValue('39.4');
   await expect(page.getByLabel('Width (%)', { exact: true })).toHaveValue('20.6');
   await page.getByRole('button', { name: 'Use crop', exact: true }).click();
-  await expect(page.getByRole('dialog')).not.toBeVisible();
+  await expect(page.getByRole('toolbar', { name: 'Crop tools' })).not.toBeVisible();
 
   await page.getByRole('button', { name: 'Print', exact: true }).click();
   await expect.poll(() => mock.submissions.length).toBe(1);

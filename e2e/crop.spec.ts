@@ -30,7 +30,7 @@ async function setup(page: Page) {
 
 async function topHalf(page: Page) {
   await page.getByRole('button', { name: 'Crop', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Crop to the label' })).toBeVisible();
+  await expect(page.getByRole('toolbar', { name: 'Crop tools' })).toBeVisible();
   await page.getByText('Fine-tune with numbers', { exact: true }).click();
   await page.getByLabel('Height (%)', { exact: true }).fill('50');
 }
@@ -43,7 +43,7 @@ test('crop preview and print use only the kept area; reset, cancel, undo and rot
   expect(await page.locator('.paper-svg').innerHTML()).toBe(before);
   await topHalf(page);
   await page.getByRole('button', { name: 'Use crop', exact: true }).click();
-  await expect(page.getByRole('dialog')).not.toBeVisible();
+  await expect(page.getByRole('toolbar', { name: 'Crop tools' })).not.toBeVisible();
   const cropped = await page.locator('.paper-svg').innerHTML();
   expect(cropped).not.toBe(before);
   // Nested crop SVGs must retain their own viewport sizes, not inherit label CSS.
@@ -64,7 +64,7 @@ test('crop preview and print use only the kept area; reset, cancel, undo and rot
   await expect.poll(() => mock.submissions.length).toBe(2);
   expect(mock.submissions[1].artifact.blackPixelCount).toBe(80_000);
   await page.getByRole('button', { name: 'Crop', exact: true }).click();
-  await page.getByRole('button', { name: 'Reset to full page' }).click();
+  await page.getByRole('button', { name: 'Reset', exact: true }).click();
   await page.getByRole('button', { name: 'Use crop' }).click();
   await expect(page.locator('.paper-svg image')).toHaveAttribute('preserveAspectRatio', 'xMidYMid meet');
   expect(await page.locator('.paper-svg svg').count()).toBe(1);
@@ -98,13 +98,13 @@ test('drag crop, move, resize and interruption stay bounded on a phone', async (
   // Global editor shortcuts must not mutate the document behind this modal.
   await page.keyboard.press('Control+z');
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('dialog')).not.toBeVisible();
+  await expect(page.getByRole('toolbar', { name: 'Crop tools' })).not.toBeVisible();
   await expect(page.locator('.paper-svg image')).toBeVisible();
   expect(mock.submissions).toHaveLength(0);
   expect(mock.errors).toEqual([]);
 });
 
-test('touch selection and preview match the committed mixed-content label', async ({ page, context }) => {
+test('touch crop on the canvas applies to the image and keeps other content', async ({ page, context }) => {
   const mock = await setup(page);
   await page.getByRole('button', { name: 'Text', exact: true }).click();
   await page.getByLabel('Label text').fill('Wide WWW letters and thin iii letters should wrap exactly the same in every preview.');
@@ -118,9 +118,14 @@ test('touch selection and preview match the committed mixed-content label', asyn
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await page.getByText('Fine-tune with numbers', { exact: true }).click();
   await expect(page.getByLabel('Width (%)', { exact: true })).toHaveValue('80');
-  const preview = await page.locator('.crop-preview').innerHTML();
   await page.getByRole('button', { name: 'Use crop' }).click();
-  expect(await page.locator('.paper-svg').innerHTML()).toBe(preview);
+  await expect(page.getByRole('toolbar', { name: 'Crop tools' })).not.toBeVisible();
+  // The label comes back with the crop applied and the text untouched.
+  const label = await page.locator('.paper-svg').innerHTML();
+  // 10%-90% x 10%-45% of 600 x 800, rounded outward; touch points land on whole screen pixels.
+  const viewBox = label.match(/viewBox="(\d+) (\d+) (\d+) (\d+)"/g)!.map(text => text.match(/\d+/g)!.map(Number)).find(([, , w]) => w < 600)!;
+  [60, 80, 480, 280].forEach((expected, index) => expect(Math.abs(viewBox[index] - expected)).toBeLessThanOrEqual(2));
+  expect(label).toContain('Wide WWW letters');
   expect(mock.errors).toEqual([]);
   expect(mock.submissions).toHaveLength(0);
 });
