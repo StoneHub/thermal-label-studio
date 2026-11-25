@@ -8,7 +8,7 @@ Printer discovery and delivery belong to Fleet. The web app can prepare one fixe
 
 - `packages/core`: canonical `LabelDocument`, Workspace edits, and SVG `RenderArtifact` generation
 - `apps/mcp`: local stdio tools for creating, editing, and previewing labels
-- `apps/web`: static human editor with direct dragging, deterministic centered crop or whole-image fit, quarter-turn rotation, element copy/paste, image or PDF import, and one-attempt `PrintIntent` preparation
+- `apps/web`: static human editor with direct dragging, visual crop with one-tap QR code detection, a Size control, deterministic centered crop or whole-image fit, quarter-turn rotation, element copy/paste, image or PDF import, and one-attempt `PrintIntent` preparation
 
 The old Konva editor and Express app remain in Git history and the working tree as reference while the rewrite proves its replacement seams. The Express app is not part of the default development command.
 
@@ -26,6 +26,8 @@ Open `http://localhost:5173`.
 The production web build uses relative assets and system fonts. It can be served as static files by the Pi print node without running Node.js on the Pi.
 
 ## Editing and printing
+
+- To blow up a QR code from a screenshot, choose Crop, then Find QR code. The crop keeps the white quiet zone scanners need, and Use crop scales it to the largest size the label allows. Controls → Size shrinks it again (the panel shows the printed size in inches).
 
 - Undo and redo up to 40 edits using the toolbar or Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z. Framing and rotation each count as one edit. Edit history lasts for the current browser session.
 - The printer connection bar checks the fixed Pi adapter when the editor opens. Refresh it after reconnecting the Pi or printer. Printing checks readiness again before preparing a label.

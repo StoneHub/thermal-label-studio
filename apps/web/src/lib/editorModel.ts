@@ -154,3 +154,51 @@ export const resizeImageFromCorner = (
     ? constrainImageGeometry(geometry, image.rotation ?? 0, label)
     : geometry;
 };
+
+/** The PM-241-BT prints 8 dots per millimetre. */
+export const LABEL_DOTS_PER_INCH = 203.2;
+export const MIN_IMAGE_SCALE_PERCENT = 10;
+
+/** Current image size as a percentage of the largest size that fits the label. */
+export const imageScalePercent = (image: LabelImageElement, label: Size): number => {
+  const largest = frameImageToLabel(image, label);
+  return Math.round(Math.min(image.width / largest.width, image.height / largest.height) * 100);
+};
+
+/**
+ * Resize an image about its centre to a percentage of the largest size that
+ * fits the label. 100% is the same frame as Fit, so a tight crop prints as
+ * large as the label allows.
+ */
+export const scaleImageToPercent = (
+  image: LabelImageElement,
+  label: Size,
+  percent: number,
+): ElementGeometry => {
+  const largest = frameImageToLabel(image, label);
+  const ratio = clamp(Number.isFinite(percent) ? percent : 100, MIN_IMAGE_SCALE_PERCENT, 100) / 100;
+  const width = Math.max(1, Math.round(largest.width * ratio));
+  const height = Math.max(1, Math.round(largest.height * ratio));
+  const centerX = image.x + image.width / 2;
+  const centerY = image.y + image.height / 2;
+  return constrainImageGeometry({
+    x: Math.round(centerX - width / 2),
+    y: Math.round(centerY - height / 2),
+    width,
+    height,
+  }, image.rotation ?? 0, label);
+};
+
+/**
+ * Printed size of a cropped image's kept pixels, in inches, as the label shows
+ * it. Returns null when the source size is unknown (an uncropped image).
+ */
+export const printedCropSize = (image: LabelImageElement): Size | null => {
+  const crop = image.crop;
+  if (!crop || crop.width <= 0 || crop.height <= 0) return null;
+  const fit = image.fit === "cover" ? Math.max : Math.min;
+  const scale = fit(image.width / crop.width, image.height / crop.height);
+  const width = Math.min(image.width, crop.width * scale) / LABEL_DOTS_PER_INCH;
+  const height = Math.min(image.height, crop.height * scale) / LABEL_DOTS_PER_INCH;
+  return (image.rotation ?? 0) % 180 === 0 ? { width, height } : { width: height, height: width };
+};

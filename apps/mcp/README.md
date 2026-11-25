@@ -36,14 +36,28 @@ The server registers exactly three tools:
 
 - `label_create` creates a `LabelDocument`.
 - `label_edit` applies the supported `WorkspaceCommand` variants
-  `rename-document`, `add-text`, `add-rectangle`, `add-image`,
-  `duplicate-element`, `update-text`, `move-element`, and `remove-element`.
+  `rename-document`, `add-text`, `add-rectangle`, `add-image`, `update-image`
+  (crop, fit, rotation), `duplicate-element`, `update-text`, `move-element`,
+  `resize-element` (scale), and `remove-element`.
   The server adds the target `documentId` to each command.
 - `label_preview` returns document metadata and the SVG source from a
   `RenderArtifact`.
 
 Readiness text is written to stderr. stdout is reserved for MCP protocol
 traffic.
+
+## Printing from agents
+
+To crop, scale and print a label from another device on the same tailnet, use the
+Pi print node's own MCP endpoint instead of this local adapter:
+
+```bash
+claude mcp add --transport http thermal-label https://<print-node-host>/mcp
+```
+
+It offers `artwork_find_qr`, `label_prepare` (crop, QR auto-crop, scale,
+rotation, exact one-bit preview) and `label_print`. Its source and contract
+live in Fleet's `services/pi-print-node`.
 
 ## Proof boundary
 

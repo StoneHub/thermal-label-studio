@@ -189,3 +189,6 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
   .crop-footer .button { min-height: 44px; }
   .workspace-bottom-button { padding-right: 3px; padding-left: 3px; }
 }
+.size-control { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; }
+.size-control input[type="range"] { width: 100%; min-height: 32px; accent-color: var(--accent, currentColor); }
+.size-control output { min-width: 4ch; text-align: right; font-family: var(--mono); font-size: 12px; }

@@ -116,6 +116,15 @@ const MoveElementCommandSchema = z.object({
   dy: z.number().optional(),
 });
 
+const ResizeElementCommandSchema = z.object({
+  type: z.literal("resize-element"),
+  elementId: z.string().min(1),
+  x: z.number(),
+  y: z.number(),
+  width: z.number().positive(),
+  height: z.number().positive(),
+});
+
 const RemoveElementCommandSchema = z.object({
   type: z.literal("remove-element"),
   elementId: z.string().min(1),
@@ -130,6 +139,7 @@ const EditCommandSchema = z.discriminatedUnion("type", [
   DuplicateElementCommandSchema,
   UpdateTextCommandSchema,
   MoveElementCommandSchema,
+  ResizeElementCommandSchema,
   RemoveElementCommandSchema,
 ]);
 
@@ -205,7 +215,8 @@ export function createMcpServer(): McpServer {
     "label_edit",
     {
       description:
-        "Apply supported edits to a LabelDocument. The server injects documentId into every WorkspaceCommand.",
+        "Apply supported edits to a LabelDocument. The server injects documentId into every WorkspaceCommand. "
+        + "Crop an image with update-image's pixel crop and scale it with resize-element; to print, use the Pi print node's MCP tools.",
       inputSchema: EditInputSchema,
     },
     async (input) => {
