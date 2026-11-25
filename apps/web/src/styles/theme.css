@@ -165,6 +165,7 @@ textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent
 .crop-handle:focus-visible, .crop-selection:focus-visible { outline: 3px solid #2163ba; outline-offset: 2px; }
 .canvas-crop-bar { position: absolute; z-index: 4; right: 12px; bottom: 12px; left: 12px; display: grid; gap: 6px; width: min(560px, calc(100% - 24px)); margin: 0 auto; padding: 8px; border: 1px solid rgba(199,208,205,.9); border-radius: 13px; background: rgba(255,253,250,.96); box-shadow: 0 10px 28px rgba(29,43,49,.13); backdrop-filter: blur(12px); }
 .canvas-crop-message { margin: 0 4px; font-size: 12px; line-height: 1.35; color: var(--muted); }
+.canvas-crop-message .link-button { padding: 0; border: 0; background: none; color: var(--accent-dark); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
 .canvas-crop-buttons { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
 .canvas-crop-buttons .button { min-height: 42px; padding: 6px 4px; font-size: 13px; }
 .crop-numbers { margin: 0 4px; font-size: 12px; }

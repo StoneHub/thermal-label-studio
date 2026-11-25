@@ -81,16 +81,16 @@ describe("importArtworkPages", () => {
     vi.unstubAllGlobals();
   });
 
-  it("imports every PDF page in order with its own dimensions and metadata", async () => {
+  it("imports every PDF page in order at 3x (216 dpi) with its own dimensions and metadata", async () => {
     const pages = [createPage(300, 200), createPage(200, 400), createPage(100, 100)];
     const { documentProxy, loadingTask } = loadPdf(pages);
 
     const artwork = await importArtworkPages(pdfFile());
 
     expect(artwork).toEqual([
-      { name: "labels.pdf — page 1", dataUrl: "data:image/png;base64,page-1", width: 600, height: 400, sourceKind: "pdf-page", pageNumber: 1, pageCount: 3 },
-      { name: "labels.pdf — page 2", dataUrl: "data:image/png;base64,page-2", width: 400, height: 800, sourceKind: "pdf-page", pageNumber: 2, pageCount: 3 },
-      { name: "labels.pdf — page 3", dataUrl: "data:image/png;base64,page-3", width: 200, height: 200, sourceKind: "pdf-page", pageNumber: 3, pageCount: 3 },
+      { name: "labels.pdf — page 1", dataUrl: "data:image/png;base64,page-1", width: 900, height: 600, sourceKind: "pdf-page", pageNumber: 1, pageCount: 3 },
+      { name: "labels.pdf — page 2", dataUrl: "data:image/png;base64,page-2", width: 600, height: 1200, sourceKind: "pdf-page", pageNumber: 2, pageCount: 3 },
+      { name: "labels.pdf — page 3", dataUrl: "data:image/png;base64,page-3", width: 300, height: 300, sourceKind: "pdf-page", pageNumber: 3, pageCount: 3 },
     ]);
     expect(documentProxy.getPage.mock.calls).toEqual([[1], [2], [3]]);
     expect(pdfjs.GlobalWorkerOptions.workerSrc).toBe("test-pdf-worker.mjs");

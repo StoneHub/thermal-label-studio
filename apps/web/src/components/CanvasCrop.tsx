@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { LabelImageCrop, LabelImageElement } from "@tls/core";
 import { cropFromPixels, cropToPixels, drawCrop, FULL_CROP, moveCrop, normalizeCrop, resizeCrop,
   type CropHandle, type CropPoint, type CropRect } from "../lib/imageCrop";
+import { findLabelOrQr } from "../lib/codeFinder";
 import { findQrCode } from "../lib/qrCrop";
 
 const HANDLES: Array<{ id: CropHandle; name: string; x: number; y: number }> = [
@@ -33,7 +34,7 @@ export function CanvasCrop({ image, paper, onCancel, onApply }: Props) {
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   const [error, setError] = useState("");
   const [rotation, setRotation] = useState<Rotation>(image.rotation ?? 0);
-  const [qrState, setQrState] = useState<{ busy: boolean; message: string }>({ busy: false, message: "" });
+  const [qrState, setQrState] = useState<{ busy: boolean; message: string; qrOffered?: boolean }>({ busy: false, message: "" });
 
   const originalCrop = cropFromPixels(image.crop);
   const unchanged = image.crop && size?.width === image.crop.sourceWidth && size.height === image.crop.sourceHeight
@@ -56,20 +57,29 @@ export function CanvasCrop({ image, paper, onCancel, onApply }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const findQr = async () => {
-    setQrState({ busy: true, message: "Looking for a QR code…" });
+  const findCode = async (qrOnly = false) => {
+    setQrState({ busy: true, message: qrOnly ? "Looking for a QR code…" : "Looking for a shipping label or QR code…" });
     try {
-      const found = await findQrCode(image.source);
+      const found = qrOnly ? await findQrCode(image.source).then(qr => qr && { kind: "qr" as const, ...qr }) : await findLabelOrQr(image.source);
       if (!found) {
-        setQrState({ busy: false, message: "No QR code found. Drag a box around it instead." });
+        setQrState({ busy: false, message: "No shipping label or QR code found. Drag a box around it instead." });
         return;
       }
       setCrop(found.crop);
       setDrawing(false);
+      if (found.kind === "label") {
+        setRotation(found.rotation);
+        const codes = `${found.barcodes} bar code${found.barcodes === 1 ? "" : "s"}`;
+        const turn = found.rotation === 0 ? "It is already upright."
+          : found.rotationFromBarcodes ? `Turned it ${found.rotation}° so it reads upright.`
+          : `Turned it ${found.rotation}° to fit the label. Use Rotate if it reads upside down.`;
+        setQrState({ busy: false, qrOffered: found.qrSeen, message: `Found a shipping label with ${codes}. ${turn}` });
+        return;
+      }
       const sample = found.data.length > 48 ? `${found.data.slice(0, 48)}…` : found.data;
       setQrState({ busy: false, message: `Found a QR code${sample ? ` (reads “${sample}”)` : ""}. The box keeps the white border scanners need.` });
     } catch {
-      setQrState({ busy: false, message: "This image could not be checked for a QR code." });
+      setQrState({ busy: false, message: "This image could not be checked for a shipping label or QR code." });
     }
   };
 
@@ -150,13 +160,14 @@ export function CanvasCrop({ image, paper, onCancel, onApply }: Props) {
     {createPortal(overlay, paper)}
     <div className="canvas-crop-bar" role="toolbar" aria-label="Crop tools">
       <p className="canvas-crop-message" role="status">{error || qrState.message
-        || (drawing ? "Drag a box around the part to keep. It will fill the label." : "Drag the box or its handles. Shaded areas are removed.")}</p>
+        || (drawing ? "Drag a box around the part to keep. It will fill the label." : "Drag the box or its handles. Shaded areas are removed.")}
+        {!error && qrState.qrOffered && !qrState.busy && <> <button className="link-button" type="button" onClick={() => { void findCode(true); }}>Use the QR code instead</button></>}</p>
       <details className="crop-numbers"><summary>Fine-tune with numbers</summary><div>{(["x", "y", "width", "height"] as const).map((field, index) =>
         <label key={field}>{["Left", "Top", "Width", "Height"][index]} (%)<input type="number" min={index < 2 ? 0 : 0.001} max="100" step="0.5"
           value={Math.round(crop[field] * 1000) / 10} onChange={event => { if (event.currentTarget.value === "") return;
             const value = event.currentTarget.valueAsNumber; if (Number.isFinite(value)) { setCrop(normalizeCrop({ ...crop, [field]: value / 100 })); setDrawing(false); } }} /></label>)}</div></details>
       <div className="canvas-crop-buttons">
-        <button className="button" type="button" onClick={() => { void findQr(); }} disabled={!size || qrState.busy}>{qrState.busy ? "Finding…" : "Find QR code"}</button>
+        <button className="button" type="button" onClick={() => { void findCode(); }} disabled={!size || qrState.busy}>{qrState.busy ? "Finding…" : "Find label or QR"}</button>
         <button className="button" type="button" onClick={() => { setCrop(FULL_CROP); setDrawing(true); setQrState({ busy: false, message: "" }); }}>Reset</button>
         <button className="button" type="button" aria-label={`Rotate label, now ${rotation}°`} onClick={() => setRotation(((rotation + 90) % 360) as Rotation)}>Rotate {rotation}°</button>
         <button className="button button-quiet" type="button" onClick={onCancel}>Cancel</button>

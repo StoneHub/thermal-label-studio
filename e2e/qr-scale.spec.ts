@@ -44,10 +44,10 @@ function decodeLabel(intent: any) {
   return { code: jsQR(rgba, 800, 1200), inkWidth: right - left + 1 };
 }
 
-test('Find QR code crops to the code and blows it up into a scannable label', async ({ page }) => {
+test('Find label or QR crops a QR-only image to the code and blows it up into a scannable label', async ({ page }) => {
   const mock = await setup(page);
   await page.getByRole('button', { name: 'Crop', exact: true }).click();
-  await page.getByRole('button', { name: 'Find QR code', exact: true }).click();
+  await page.getByRole('button', { name: 'Find label or QR', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Found a QR code' })).toContainText('example.com/return');
   await page.getByText('Fine-tune with numbers', { exact: true }).click();
   // The 116 px symbol at (300, 600) plus a 16 px quiet zone on a 720 x 1280 page.
@@ -68,7 +68,7 @@ test('Find QR code crops to the code and blows it up into a scannable label', as
 test('Size scales the cropped image and is one undoable edit', async ({ page }) => {
   const mock = await setup(page);
   await page.getByRole('button', { name: 'Crop', exact: true }).click();
-  await page.getByRole('button', { name: 'Find QR code', exact: true }).click();
+  await page.getByRole('button', { name: 'Find label or QR', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Found a QR code' })).toBeVisible();
   await page.getByRole('button', { name: 'Use crop', exact: true }).click();
   await page.getByRole('button', { name: 'Controls', exact: true }).click();
